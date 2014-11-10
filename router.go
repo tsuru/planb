@@ -105,7 +105,7 @@ func (router *Router) Director(req *http.Request) {
 	}
 	req.URL.Scheme = url.Scheme
 	req.URL.Host = url.Host
-	if req.Header.Get("X-Debug") != "" {
+	if req.Header.Get("X-Debug-Router") != "" {
 		req.Header.Set("X-Debug-Backend-Url", backend)
 		req.Header.Set("X-Debug-Backend-Id", strconv.FormatUint(toUseNumber, 10))
 		req.Header.Set("X-Debug-Frontend-Key", host)
@@ -153,5 +153,10 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (router *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	if req.Host == "__ping__" && req.URL.Path == "/" {
+		rw.WriteHeader(http.StatusOK)
+		rw.Write([]byte("OK"))
+		return
+	}
 	router.rp.ServeHTTP(rw, req)
 }
