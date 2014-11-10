@@ -114,7 +114,7 @@ func (router *Router) Director(req *http.Request) {
 
 func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 	var debugVars map[string]string
-	if req.Header.Get("X-Debug") != "" {
+	if req.Header.Get("X-Debug-Router") != "" {
 		debugVars = map[string]string{}
 		for k, v := range req.Header {
 			if strings.HasPrefix(k, "X-Debug") {
@@ -130,7 +130,7 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 		closerBuffer := ioutil.NopCloser(bytes.NewBuffer(NO_ROUTE_DATA))
 		rsp = &http.Response{
 			Request:       req,
-			StatusCode:    400,
+			StatusCode:    http.StatusBadRequest,
 			ProtoMajor:    req.ProtoMajor,
 			ProtoMinor:    req.ProtoMinor,
 			ContentLength: int64(len(NO_ROUTE_DATA)),
