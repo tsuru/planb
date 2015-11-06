@@ -4,24 +4,29 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
 )
 
-const (
-	TIME_ALIGNED_NANO = "2006-01-02T15:04:05.000000000Z07:00"
+var (
+	noRouteData       = []byte("no such route")
+	emptyBufferReader = ioutil.NopCloser(&bytes.Buffer{})
 )
 
-var (
-	NO_ROUTE_DATA = []byte("no such route")
-)
+type requestData struct {
+	backendLen int
+	backend    string
+	backendIdx int
+	host       string
+	debug      bool
+}
 
 type Router struct {
 	RedisHost  string
@@ -31,6 +36,8 @@ type Router struct {
 	redisPool  *redis.Pool
 	logger     *Logger
 	roundRobin uint64
+	reqCtx     map[*http.Request]*requestData
+	transport  *http.Transport
 }
 
 func (router *Router) Init() error {
@@ -62,6 +69,14 @@ func (router *Router) Init() error {
 			return err
 		}
 	}
+	router.reqCtx = make(map[*http.Request]*requestData)
+	router.transport = &http.Transport{
+		Dial: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).Dial,
+		TLSHandshakeTimeout: 10 * time.Second,
+	}
 	router.rp = &httputil.ReverseProxy{Director: router.Director, Transport: router}
 	return nil
 }
@@ -71,9 +86,15 @@ func (router *Router) Stop() {
 }
 
 func (router *Router) Director(req *http.Request) {
+	reqData := &requestData{
+		debug: req.Header.Get("X-Debug-Router") != "",
+	}
+	req.Header.Del("X-Debug-Router")
+	router.reqCtx[req] = reqData
 	conn := router.redisPool.Get()
 	defer conn.Close()
-	host := req.Host
+	host, _, _ := net.SplitHostPort(req.Host)
+	reqData.host = host
 	conn.Send("MULTI")
 	conn.Send("LRANGE", "frontend:"+host, 1, -1)
 	conn.Send("SMEMBERS", "dead:"+host)
@@ -88,83 +109,90 @@ func (router *Router) Director(req *http.Request) {
 		return
 	}
 	backends := responses[0].([]interface{})
-	if len(backends) == 0 {
+	reqData.backendLen = len(backends)
+	if reqData.backendLen == 0 {
 		return
 	}
 	deadMembers := responses[1].([]interface{})
-	deadMap := map[string]struct{}{}
+	deadMap := map[uint64]struct{}{}
 	for _, dead := range deadMembers {
-		deadName := string(dead.([]byte))
-		deadMap[deadName] = struct{}{}
+		deadIdx, _ := strconv.ParseUint(string(dead.([]byte)), 10, 64)
+		deadMap[deadIdx] = struct{}{}
 	}
 	// We always add, it will eventually overflow to zero which is fine.
-	toUseNumber := atomic.AddUint64(&router.roundRobin, 1)
-	var backend string
-	for {
-		toUseNumber = toUseNumber % uint64(len(backends))
-		backend = string(backends[toUseNumber].([]byte))
-		_, isDead := deadMap[backend]
+	initialNumber := atomic.AddUint64(&router.roundRobin, 1)
+	initialNumber = initialNumber % uint64(reqData.backendLen)
+	toUseNumber := -1
+	for chosenNumber := initialNumber + 1; chosenNumber != initialNumber; chosenNumber++ {
+		chosenNumber = chosenNumber % uint64(reqData.backendLen)
+		_, isDead := deadMap[chosenNumber]
 		if !isDead {
+			toUseNumber = int(chosenNumber)
 			break
 		}
-		toUseNumber++
 	}
-	url, err := url.Parse(backend)
+	if toUseNumber == -1 {
+		return
+	}
+	reqData.backendIdx = toUseNumber
+	reqData.backend = string(backends[toUseNumber].([]byte))
+	url, err := url.Parse(reqData.backend)
 	if err != nil {
 		logError(err)
 		return
 	}
 	req.URL.Scheme = url.Scheme
 	req.URL.Host = url.Host
-	if req.Header.Get("X-Debug-Router") != "" {
-		// TODO: This is a hack we should use a map using the request as a key
-		req.Header.Set("X-Debug-Backend-Url", backend)
-		req.Header.Set("X-Debug-Backend-Id", strconv.FormatUint(toUseNumber, 10))
-		req.Header.Set("X-Debug-Frontend-Key", host)
-	}
 }
 
 func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
-	var debugVars map[string]string
-	if req.Header.Get("X-Debug-Router") != "" {
-		debugVars = map[string]string{}
-		for k, v := range req.Header {
-			if strings.HasPrefix(k, "X-Debug") {
-				debugVars[k] = v[0]
-				req.Header.Del(k)
-			}
-		}
-	}
+	reqData := router.reqCtx[req]
+	delete(router.reqCtx, req)
 	var rsp *http.Response
 	var err error
 	t0 := time.Now().UTC()
 	if req.URL.Scheme == "" || req.URL.Host == "" {
-		closerBuffer := ioutil.NopCloser(bytes.NewBuffer(NO_ROUTE_DATA))
+		closerBuffer := ioutil.NopCloser(bytes.NewBuffer(noRouteData))
 		rsp = &http.Response{
 			Request:       req,
 			StatusCode:    http.StatusBadRequest,
 			ProtoMajor:    req.ProtoMajor,
 			ProtoMinor:    req.ProtoMinor,
-			ContentLength: int64(len(NO_ROUTE_DATA)),
+			ContentLength: int64(len(noRouteData)),
 			Body:          closerBuffer,
 		}
 	} else {
-		rsp, err = http.DefaultTransport.RoundTrip(req)
-		// TODO: handle error responses adding backend to dead backend set in
-		// redis and publishing a message in the deads pubsub channel.
-	}
-	if err == nil {
-		// TODO: format log messages in logs goroutine
-		reqDuration := time.Since(t0)
-		nowFormatted := time.Now().Format(TIME_ALIGNED_NANO)
-		router.logger.Message(fmt.Sprintf("%s %s %s %s %d in %0.6f ms", nowFormatted, req.Host, req.Method, req.URL.Path, rsp.StatusCode, float64(reqDuration)/float64(time.Millisecond)))
-		if debugVars != nil {
-			for k, v := range debugVars {
-				rsp.Header.Set(k, v)
+		rsp, err = router.transport.RoundTrip(req)
+		if err != nil {
+			logError(err)
+			conn := router.redisPool.Get()
+			defer conn.Close()
+			conn.Send("MULTI")
+			conn.Send("SADD", "dead:"+reqData.host, reqData.backendIdx)
+			conn.Send("EXPIRE", "dead:"+reqData.host, "30")
+			conn.Send("PUBLISH", "dead", fmt.Sprintf("%s;%s;%d;%d", reqData.host, reqData.backend, reqData.backendIdx, reqData.backendLen))
+			_, redisErr := conn.Do("EXEC")
+			if redisErr != nil {
+				logError(redisErr)
+			}
+			rsp = &http.Response{
+				Request:    req,
+				StatusCode: http.StatusServiceUnavailable,
+				ProtoMajor: req.ProtoMajor,
+				ProtoMinor: req.ProtoMinor,
+				Header:     http.Header{},
+				Body:       emptyBufferReader,
 			}
 		}
 	}
-	return rsp, err
+	reqDuration := time.Since(t0)
+	router.logger.MessageRaw(time.Now(), req, rsp, reqDuration)
+	if reqData.debug {
+		rsp.Header.Set("X-Debug-Backend-Url", reqData.backend)
+		rsp.Header.Set("X-Debug-Backend-Id", strconv.FormatUint(uint64(reqData.backendIdx), 10))
+		rsp.Header.Set("X-Debug-Frontend-Key", reqData.host)
+	}
+	return rsp, nil
 }
 
 func (router *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {

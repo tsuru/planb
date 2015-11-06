@@ -4,13 +4,27 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
+	"time"
+)
+
+const (
+	TIME_ALIGNED_NANO = "2006-01-02T15:04:05.000000000Z07:00"
 )
 
 type Logger struct {
-	logChan chan string
-	done    chan bool
-	writer  io.WriteCloser
+	logChan    chan *logEntry
+	done       chan bool
+	writer     io.WriteCloser
+	nextNotify <-chan time.Time
+}
+
+type logEntry struct {
+	now      time.Time
+	req      *http.Request
+	rsp      *http.Response
+	duration time.Duration
 }
 
 func NewFileLogger(path string) (*Logger, error) {
@@ -23,18 +37,30 @@ func NewFileLogger(path string) (*Logger, error) {
 
 func NewWriterLogger(writer io.WriteCloser) *Logger {
 	l := Logger{
-		logChan: make(chan string, 10000),
-		done:    make(chan bool),
-		writer:  writer,
+		logChan:    make(chan *logEntry, 10000),
+		done:       make(chan bool),
+		writer:     writer,
+		nextNotify: time.After(0),
 	}
 	go l.logWriter()
 	return &l
 }
 
-func (l *Logger) Message(msg string) {
+func (l *Logger) MessageRaw(now time.Time, req *http.Request, rsp *http.Response, duration time.Duration) {
 	select {
-	case l.logChan <- msg:
+	case l.logChan <- &logEntry{
+		now:      now,
+		req:      req,
+		rsp:      rsp,
+		duration: duration,
+	}:
 	default:
+		select {
+		case <-l.nextNotify:
+			log.Print("Dropping log messages to due to full channel buffer.")
+			l.nextNotify = time.After(time.Minute)
+		default:
+		}
 	}
 }
 
@@ -47,10 +73,11 @@ func (l *Logger) logWriter() {
 	defer close(l.done)
 	defer l.writer.Close()
 	for el := range l.logChan {
-		fmt.Fprintln(l.writer, el)
+		nowFormatted := el.now.Format(TIME_ALIGNED_NANO)
+		fmt.Fprintf(l.writer, "%s %s %s %s %d in %0.6f ms\n", nowFormatted, el.req.Host, el.req.Method, el.req.URL.Path, el.rsp.StatusCode, float64(el.duration)/float64(time.Millisecond))
 	}
 }
 
 func logError(err error) {
-	log.Print("ERROR:", err.Error())
+	log.Print("ERROR: ", err.Error())
 }

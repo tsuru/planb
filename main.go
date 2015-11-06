@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -8,7 +9,7 @@ import (
 )
 
 func main() {
-	listener, err := net.Listen("tcp", "0.0.0.0:8080")
+	listener, err := net.Listen("tcp", "0.0.0.0:8989")
 	if err != nil {
 		panic(err)
 	}
@@ -25,8 +26,10 @@ func main() {
 	go func() {
 		if _, ok := <-sigChan; ok {
 			router.Stop()
+			os.Exit(0)
 		}
 	}()
 	signal.Notify(sigChan, os.Interrupt, os.Kill)
+	fmt.Printf("Listening on %v...\n", listener.Addr())
 	panic(http.Serve(listener, &router))
 }
