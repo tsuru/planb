@@ -14,9 +14,11 @@ func main() {
 		panic(err)
 	}
 	router := Router{
-		RedisHost: "127.0.0.1",
-		RedisPort: 6379,
-		LogPath:   "./access.log",
+		ReadRedisHost:  "127.0.0.1",
+		ReadRedisPort:  6379,
+		WriteRedisHost: "127.0.0.1",
+		WriteRedisPort: 6379,
+		LogPath:        "./access.log",
 	}
 	err = router.Init()
 	if err != nil {

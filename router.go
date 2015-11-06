@@ -29,38 +29,49 @@ type requestData struct {
 }
 
 type Router struct {
-	RedisHost  string
-	RedisPort  int
-	LogPath    string
-	rp         *httputil.ReverseProxy
-	redisPool  *redis.Pool
-	logger     *Logger
-	roundRobin uint64
-	reqCtx     map[*http.Request]*requestData
-	transport  *http.Transport
+	ReadRedisHost  string
+	ReadRedisPort  int
+	WriteRedisHost string
+	WriteRedisPort int
+	LogPath        string
+	rp             *httputil.ReverseProxy
+	readRedisPool  *redis.Pool
+	writeRedisPool *redis.Pool
+	logger         *Logger
+	roundRobin     uint64
+	reqCtx         map[*http.Request]*requestData
+	transport      *http.Transport
 }
 
-func (router *Router) Init() error {
+func redisDialer(host string, port int) func() (redis.Conn, error) {
 	readTimeout := time.Second
 	writeTimeout := time.Second
 	dialTimeout := time.Second
-	if router.RedisHost == "" {
-		router.RedisHost = "127.0.0.1"
+	if host == "" {
+		host = "127.0.0.1"
 	}
-	if router.RedisPort == 0 {
-		router.RedisPort = 6379
+	if port == 0 {
+		port = 6379
 	}
-	redisAddr := fmt.Sprintf("%s:%d", router.RedisHost, router.RedisPort)
-	redisDialFunc := func() (redis.Conn, error) {
+	redisAddr := fmt.Sprintf("%s:%d", host, port)
+	return func() (redis.Conn, error) {
 		return redis.DialTimeout("tcp", redisAddr, dialTimeout, readTimeout, writeTimeout)
 	}
+}
+
+func (router *Router) Init() error {
 	if router.LogPath == "" {
 		router.LogPath = "./access.log"
 	}
-	router.redisPool = &redis.Pool{
+	router.readRedisPool = &redis.Pool{
 		MaxIdle:     100,
 		IdleTimeout: 1 * time.Minute,
-		Dial:        redisDialFunc,
+		Dial:        redisDialer(router.ReadRedisHost, router.ReadRedisPort),
+	}
+	router.writeRedisPool = &redis.Pool{
+		MaxIdle:     100,
+		IdleTimeout: 1 * time.Minute,
+		Dial:        redisDialer(router.WriteRedisHost, router.WriteRedisPort),
 	}
 	if router.logger == nil {
 		var err error
@@ -91,7 +102,7 @@ func (router *Router) Director(req *http.Request) {
 	}
 	req.Header.Del("X-Debug-Router")
 	router.reqCtx[req] = reqData
-	conn := router.redisPool.Get()
+	conn := router.readRedisPool.Get()
 	defer conn.Close()
 	host, _, _ := net.SplitHostPort(req.Host)
 	reqData.host = host
@@ -165,7 +176,7 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 		rsp, err = router.transport.RoundTrip(req)
 		if err != nil {
 			logError(err)
-			conn := router.redisPool.Get()
+			conn := router.writeRedisPool.Get()
 			defer conn.Close()
 			conn.Send("MULTI")
 			conn.Send("SADD", "dead:"+reqData.host, reqData.backendIdx)
