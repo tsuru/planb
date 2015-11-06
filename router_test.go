@@ -26,7 +26,7 @@ func (s *S) TestInit(c *check.C) {
 	router := Router{}
 	err := router.Init()
 	c.Assert(err, check.IsNil)
-	c.Assert(router.roundRobin, check.Equals, uint64(0))
+	c.Assert(router.roundRobin, check.DeepEquals, map[string]*uint64{})
 	ptr1 := reflect.ValueOf(router.rp.Director).Pointer()
 	ptr2 := reflect.ValueOf(router.Director).Pointer()
 	c.Assert(ptr1, check.Equals, ptr2)
