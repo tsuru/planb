@@ -9,6 +9,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -29,6 +30,7 @@ type requestData struct {
 }
 
 type Router struct {
+	http.Transport
 	ReadRedisHost  string
 	ReadRedisPort  int
 	WriteRedisHost string
@@ -39,8 +41,8 @@ type Router struct {
 	writeRedisPool *redis.Pool
 	logger         *Logger
 	roundRobin     uint64
+	ctxMutex       sync.Mutex
 	reqCtx         map[*http.Request]*requestData
-	transport      *http.Transport
 }
 
 func redisDialer(host string, port int) func() (redis.Conn, error) {
@@ -81,7 +83,7 @@ func (router *Router) Init() error {
 		}
 	}
 	router.reqCtx = make(map[*http.Request]*requestData)
-	router.transport = &http.Transport{
+	router.Transport = http.Transport{
 		Dial: (&net.Dialer{
 			Timeout:   10 * time.Second,
 			KeepAlive: 30 * time.Second,
@@ -101,7 +103,9 @@ func (router *Router) Director(req *http.Request) {
 		debug: req.Header.Get("X-Debug-Router") != "",
 	}
 	req.Header.Del("X-Debug-Router")
+	router.ctxMutex.Lock()
 	router.reqCtx[req] = reqData
+	router.ctxMutex.Unlock()
 	conn := router.readRedisPool.Get()
 	defer conn.Close()
 	host, _, _ := net.SplitHostPort(req.Host)
@@ -157,8 +161,10 @@ func (router *Router) Director(req *http.Request) {
 }
 
 func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
+	router.ctxMutex.Lock()
 	reqData := router.reqCtx[req]
 	delete(router.reqCtx, req)
+	router.ctxMutex.Unlock()
 	var rsp *http.Response
 	var err error
 	t0 := time.Now().UTC()
@@ -173,7 +179,7 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 			Body:          closerBuffer,
 		}
 	} else {
-		rsp, err = router.transport.RoundTrip(req)
+		rsp, err = router.Transport.RoundTrip(req)
 		if err != nil {
 			logError(err)
 			conn := router.writeRedisPool.Get()
