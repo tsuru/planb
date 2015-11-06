@@ -40,9 +40,10 @@ type Router struct {
 	readRedisPool  *redis.Pool
 	writeRedisPool *redis.Pool
 	logger         *Logger
-	roundRobin     uint64
 	ctxMutex       sync.Mutex
 	reqCtx         map[*http.Request]*requestData
+	rrMutex        sync.RWMutex
+	roundRobin     map[string]*uint64
 }
 
 func redisDialer(host string, port int) func() (redis.Conn, error) {
@@ -90,6 +91,7 @@ func (router *Router) Init() error {
 		}).Dial,
 		TLSHandshakeTimeout: 10 * time.Second,
 	}
+	router.roundRobin = make(map[string]*uint64)
 	router.rp = &httputil.ReverseProxy{Director: router.Director, Transport: router}
 	return nil
 }
@@ -134,8 +136,22 @@ func (router *Router) Director(req *http.Request) {
 		deadIdx, _ := strconv.ParseUint(string(dead.([]byte)), 10, 64)
 		deadMap[deadIdx] = struct{}{}
 	}
+	router.rrMutex.RLock()
+	roundRobin := router.roundRobin[host]
+	if roundRobin == nil {
+		router.rrMutex.RUnlock()
+		router.rrMutex.Lock()
+		roundRobin = router.roundRobin[host]
+		if roundRobin == nil {
+			roundRobin = new(uint64)
+			router.roundRobin[host] = roundRobin
+		}
+		router.rrMutex.Unlock()
+	} else {
+		router.rrMutex.RUnlock()
+	}
 	// We always add, it will eventually overflow to zero which is fine.
-	initialNumber := atomic.AddUint64(&router.roundRobin, 1)
+	initialNumber := atomic.AddUint64(roundRobin, 1)
 	initialNumber = initialNumber % uint64(reqData.backendLen)
 	toUseNumber := -1
 	for chosenNumber := initialNumber + 1; chosenNumber != initialNumber; chosenNumber++ {
