@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -22,40 +21,53 @@ const (
 
 var (
 	NO_ROUTE_DATA = []byte("no such route")
-	domainRegexp  = regexp.MustCompile(`([^.]+\.[^.]+)$`)
 )
 
-func extractDomain(host string) string {
-	matches := domainRegexp.FindStringSubmatch(host)
-	if len(matches) > 0 {
-		return matches[0]
-	}
-	return host
-}
-
 type Router struct {
+	RedisHost  string
+	RedisPort  int
+	LogPath    string
 	rp         *httputil.ReverseProxy
 	redisPool  *redis.Pool
-	logChan    chan string
+	logger     *Logger
 	roundRobin uint64
 }
 
 func (router *Router) Init() error {
+	readTimeout := time.Second
+	writeTimeout := time.Second
+	dialTimeout := time.Second
+	if router.RedisHost == "" {
+		router.RedisHost = "127.0.0.1"
+	}
+	if router.RedisPort == 0 {
+		router.RedisPort = 6379
+	}
+	redisAddr := fmt.Sprintf("%s:%d", router.RedisHost, router.RedisPort)
 	redisDialFunc := func() (redis.Conn, error) {
-		return redis.Dial("tcp", "127.0.0.1:6379")
+		return redis.DialTimeout("tcp", redisAddr, dialTimeout, readTimeout, writeTimeout)
+	}
+	if router.LogPath == "" {
+		router.LogPath = "./access.log"
 	}
 	router.redisPool = &redis.Pool{
 		MaxIdle:     100,
 		IdleTimeout: 1 * time.Minute,
 		Dial:        redisDialFunc,
 	}
-	logChan, err := createLogger()
-	if err != nil {
-		return err
+	if router.logger == nil {
+		var err error
+		router.logger, err = NewFileLogger(router.LogPath)
+		if err != nil {
+			return err
+		}
 	}
-	router.logChan = logChan
 	router.rp = &httputil.ReverseProxy{Director: router.Director, Transport: router}
 	return nil
+}
+
+func (router *Router) Stop() {
+	router.logger.Stop()
 }
 
 func (router *Router) Director(req *http.Request) {
@@ -64,7 +76,6 @@ func (router *Router) Director(req *http.Request) {
 	host := req.Host
 	conn.Send("MULTI")
 	conn.Send("LRANGE", "frontend:"+host, 1, -1)
-	conn.Send("LRANGE", "frontend:*."+extractDomain(host), 1, -1)
 	conn.Send("SMEMBERS", "dead:"+host)
 	data, err := conn.Do("EXEC")
 	if err != nil {
@@ -72,7 +83,7 @@ func (router *Router) Director(req *http.Request) {
 		return
 	}
 	responses := data.([]interface{})
-	if len(responses) != 3 {
+	if len(responses) != 2 {
 		logError(fmt.Errorf("unexpected redis response: %#v", responses))
 		return
 	}
@@ -80,7 +91,7 @@ func (router *Router) Director(req *http.Request) {
 	if len(backends) == 0 {
 		return
 	}
-	deadMembers := responses[2].([]interface{})
+	deadMembers := responses[1].([]interface{})
 	deadMap := map[string]struct{}{}
 	for _, dead := range deadMembers {
 		deadName := string(dead.([]byte))
@@ -142,7 +153,7 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err == nil {
 		reqDuration := time.Since(t0)
 		nowFormatted := time.Now().Format(TIME_ALIGNED_NANO)
-		router.logChan <- fmt.Sprintf("%s %s %s %s %d in %0.6f ms", nowFormatted, req.Host, req.Method, req.URL.Path, rsp.StatusCode, float64(reqDuration)/float64(time.Millisecond))
+		router.logger.Message(fmt.Sprintf("%s %s %s %s %d in %0.6f ms", nowFormatted, req.Host, req.Method, req.URL.Path, rsp.StatusCode, float64(reqDuration)/float64(time.Millisecond)))
 		if debugVars != nil {
 			for k, v := range debugVars {
 				rsp.Header.Set(k, v)
