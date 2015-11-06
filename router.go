@@ -117,6 +117,7 @@ func (router *Router) Director(req *http.Request) {
 	req.URL.Scheme = url.Scheme
 	req.URL.Host = url.Host
 	if req.Header.Get("X-Debug-Router") != "" {
+		// TODO: This is a hack we should use a map using the request as a key
 		req.Header.Set("X-Debug-Backend-Url", backend)
 		req.Header.Set("X-Debug-Backend-Id", strconv.FormatUint(toUseNumber, 10))
 		req.Header.Set("X-Debug-Frontend-Key", host)
@@ -149,8 +150,11 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	} else {
 		rsp, err = http.DefaultTransport.RoundTrip(req)
+		// TODO: handle error responses adding backend to dead backend set in
+		// redis and publishing a message in the deads pubsub channel.
 	}
 	if err == nil {
+		// TODO: format log messages in logs goroutine
 		reqDuration := time.Since(t0)
 		nowFormatted := time.Now().Format(TIME_ALIGNED_NANO)
 		router.logger.Message(fmt.Sprintf("%s %s %s %s %d in %0.6f ms", nowFormatted, req.Host, req.Method, req.URL.Path, rsp.StatusCode, float64(reqDuration)/float64(time.Millisecond)))
