@@ -36,6 +36,7 @@ type Router struct {
 	WriteRedisHost string
 	WriteRedisPort int
 	LogPath        string
+	RequestTimeout time.Duration
 	rp             *httputil.ReverseProxy
 	readRedisPool  *redis.Pool
 	writeRedisPool *redis.Pool
@@ -188,6 +189,11 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 	var rsp *http.Response
 	var err error
 	t0 := time.Now().UTC()
+	if router.RequestTimeout > 0 {
+		time.AfterFunc(router.RequestTimeout, func() {
+			router.Transport.CancelRequest(req)
+		})
+	}
 	if req.URL.Scheme == "" || req.URL.Host == "" {
 		closerBuffer := ioutil.NopCloser(bytes.NewBuffer(noRouteData))
 		rsp = &http.Response{

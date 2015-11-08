@@ -23,6 +23,7 @@ func main() {
 		WriteRedisHost: "127.0.0.1",
 		WriteRedisPort: 6379,
 		LogPath:        "./access.log",
+		RequestTimeout: 30 * time.Second,
 	}
 	err = router.Init()
 	if err != nil {
