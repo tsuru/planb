@@ -90,6 +90,7 @@ func (router *Router) Init() error {
 			KeepAlive: 30 * time.Second,
 		}).Dial,
 		TLSHandshakeTimeout: 10 * time.Second,
+		MaxIdleConnsPerHost: 100,
 	}
 	router.roundRobin = make(map[string]*uint64)
 	router.rp = &httputil.ReverseProxy{Director: router.Director, Transport: router}
@@ -111,6 +112,9 @@ func (router *Router) Director(req *http.Request) {
 	conn := router.readRedisPool.Get()
 	defer conn.Close()
 	host, _, _ := net.SplitHostPort(req.Host)
+	if host == "" {
+		host = req.Host
+	}
 	reqData.host = host
 	conn.Send("MULTI")
 	conn.Send("LRANGE", "frontend:"+host, 1, -1)
