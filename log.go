@@ -78,7 +78,7 @@ func (l *Logger) logWriter() {
 	defer l.writer.Close()
 	for el := range l.logChan {
 		nowFormatted := el.now.Format(TIME_ALIGNED_NANO)
-		fmt.Fprintf(l.writer, "%s %s %s %s %d in %0.6f ms\n", nowFormatted, el.req.Host, el.req.Method, el.req.URL.Path, el.rsp.StatusCode, float64(el.duration)/float64(time.Millisecond))
+		fmt.Fprintf(l.writer, "%s - - [%s] %s %s %s %d <socketBytesWritten> %s %s <virtualhost> <totaltime> %0.6f\n", el.req.RemoteAddr, nowFormatted, el.req.Method, el.req.URL.Path, el.req.Proto, el.rsp.StatusCode, el.req.Referer(), el.req.UserAgent(), float64(el.duration)/float64(time.Millisecond))
 	}
 }
 
