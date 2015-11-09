@@ -247,22 +247,31 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 		rsp, err = router.Transport.RoundTrip(req)
 		backendDuration = time.Since(t0)
 		if err != nil {
+			markAsDead := false
+			if netErr, ok := err.(net.Error); ok {
+				markAsDead = !netErr.Temporary()
+			}
 			isTimeout := atomic.LoadInt32(&timedout) == int32(1)
 			if isTimeout {
 				err = fmt.Errorf("request timed out after %v: %s", router.RequestTimeout, err)
 			} else {
 				err = fmt.Errorf("error in backend request: %s", err)
 			}
+			if markAsDead {
+				err = fmt.Errorf("%s *DEAD*", err)
+			}
 			logError(reqData.String(), err)
-			conn := router.writeRedisPool.Get()
-			defer conn.Close()
-			conn.Send("MULTI")
-			conn.Send("SADD", "dead:"+reqData.host, reqData.backendIdx)
-			conn.Send("EXPIRE", "dead:"+reqData.host, "30")
-			conn.Send("PUBLISH", "dead", fmt.Sprintf("%s;%s;%d;%d", reqData.host, reqData.backend, reqData.backendIdx, reqData.backendLen))
-			_, redisErr := conn.Do("EXEC")
-			if redisErr != nil {
-				logError(reqData.String(), fmt.Errorf("error markind dead backend in redis: %s", redisErr))
+			if markAsDead {
+				conn := router.writeRedisPool.Get()
+				defer conn.Close()
+				conn.Send("MULTI")
+				conn.Send("SADD", "dead:"+reqData.host, reqData.backendIdx)
+				conn.Send("EXPIRE", "dead:"+reqData.host, "30")
+				conn.Send("PUBLISH", "dead", fmt.Sprintf("%s;%s;%d;%d", reqData.host, reqData.backend, reqData.backendIdx, reqData.backendLen))
+				_, redisErr := conn.Do("EXEC")
+				if redisErr != nil {
+					logError(reqData.String(), fmt.Errorf("error markind dead backend in redis: %s", redisErr))
+				}
 			}
 			rsp = &http.Response{
 				Request:    req,
