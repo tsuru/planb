@@ -39,6 +39,7 @@ type Router struct {
 	WriteRedisHost string
 	WriteRedisPort int
 	LogPath        string
+	DialTimeout    time.Duration
 	RequestTimeout time.Duration
 	rp             *httputil.ReverseProxy
 	dialer         *net.Dialer
@@ -90,12 +91,12 @@ func (router *Router) Init() error {
 	}
 	router.reqCtx = make(map[*http.Request]*requestData)
 	router.dialer = &net.Dialer{
-		Timeout:   10 * time.Second,
+		Timeout:   router.DialTimeout,
 		KeepAlive: 30 * time.Second,
 	}
 	router.Transport = http.Transport{
 		Dial:                router.dialer.Dial,
-		TLSHandshakeTimeout: 10 * time.Second,
+		TLSHandshakeTimeout: router.DialTimeout,
 		MaxIdleConnsPerHost: 100,
 	}
 	router.roundRobin = make(map[string]*uint64)
