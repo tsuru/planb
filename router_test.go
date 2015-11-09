@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"github.com/garyburd/redigo/redis"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +15,9 @@ import (
 	"gopkg.in/check.v1"
 )
 
-type S struct{}
+type S struct {
+	redis redis.Conn
+}
 
 var _ = check.Suite(&S{})
 
@@ -22,11 +25,32 @@ func Test(t *testing.T) {
 	check.TestingT(t)
 }
 
+func (s *S) SetUpTest(c *check.C) {
+	var err error
+	s.redis, err = redis.Dial("tcp", "127.0.0.1:6379")
+	c.Assert(err, check.IsNil)
+	keys, err := redis.Values(s.redis.Do("KEYS", "frontend:*"))
+	c.Assert(err, check.IsNil)
+	for _, k := range keys {
+		_, err = s.redis.Do("DEL", k)
+		c.Assert(err, check.IsNil)
+	}
+}
+
+func (s *S) TearDownTest(c *check.C) {
+	s.redis.Close()
+}
+
 func (s *S) TestInit(c *check.C) {
 	router := Router{}
 	err := router.Init()
 	c.Assert(err, check.IsNil)
 	c.Assert(router.roundRobin, check.DeepEquals, map[string]*uint64{})
+	type requestCanceler interface {
+		CancelRequest(*http.Request)
+	}
+	var canceler requestCanceler
+	c.Assert(&router, check.Implements, &canceler)
 	ptr1 := reflect.ValueOf(router.rp.Director).Pointer()
 	ptr2 := reflect.ValueOf(router.Director).Pointer()
 	c.Assert(ptr1, check.Equals, ptr2)
@@ -134,4 +158,48 @@ func (s *S) TestRoundTripNoRoute(c *check.C) {
 	data, err := ioutil.ReadAll(rsp.Body)
 	c.Assert(err, check.IsNil)
 	c.Assert(data, check.DeepEquals, noRouteData)
+}
+
+func (s *S) TestServeHTTPRoundRobin(c *check.C) {
+	var servers []*httptest.Server
+	for i := 0; i < 4; i++ {
+		msg := fmt.Sprintf("server-%d", i)
+		srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+			rw.Write([]byte(msg + req.URL.Path))
+		}))
+		defer srv.Close()
+		servers = append(servers, srv)
+	}
+	var err error
+	_, err = s.redis.Do("RPUSH", "frontend:myfrontend.com", "myfrontend", servers[0].URL, servers[1].URL)
+	c.Assert(err, check.IsNil)
+	_, err = s.redis.Do("RPUSH", "frontend:otherfrontend.com", "otherfrontend", servers[2].URL, servers[3].URL)
+	c.Assert(err, check.IsNil)
+	router := Router{}
+	err = router.Init()
+	c.Assert(err, check.IsNil)
+	request1, err := http.NewRequest("GET", "http://myfrontend.com/somewhere", nil)
+	c.Assert(err, check.IsNil)
+	request2, err := http.NewRequest("GET", "http://otherfrontend.com/somewhere", nil)
+	c.Assert(err, check.IsNil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request1)
+	c.Assert(recorder.Code, check.Equals, http.StatusOK)
+	c.Assert(recorder.Body.String(), check.Equals, "server-0/somewhere")
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request2)
+	c.Assert(recorder.Code, check.Equals, http.StatusOK)
+	c.Assert(recorder.Body.String(), check.Equals, "server-2/somewhere")
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request1)
+	c.Assert(recorder.Code, check.Equals, http.StatusOK)
+	c.Assert(recorder.Body.String(), check.Equals, "server-1/somewhere")
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request1)
+	c.Assert(recorder.Code, check.Equals, http.StatusOK)
+	c.Assert(recorder.Body.String(), check.Equals, "server-0/somewhere")
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request2)
+	c.Assert(recorder.Code, check.Equals, http.StatusOK)
+	c.Assert(recorder.Body.String(), check.Equals, "server-3/somewhere")
 }

@@ -266,6 +266,7 @@ func (router *Router) serveWebsocket(rw http.ResponseWriter, req *http.Request) 
 	if err != nil {
 		return err
 	}
+	defer dstConn.Close()
 	hj, ok := rw.(http.Hijacker)
 	if !ok {
 		return errors.New("not a hijacker")
@@ -275,7 +276,12 @@ func (router *Router) serveWebsocket(rw http.ResponseWriter, req *http.Request) 
 		return err
 	}
 	defer conn.Close()
-	defer dstConn.Close()
+	if clientIP, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
+		if prior, ok := req.Header["X-Forwarded-For"]; ok {
+			clientIP = strings.Join(prior, ", ") + ", " + clientIP
+		}
+		req.Header.Set("X-Forwarded-For", clientIP)
+	}
 	err = req.Write(dstConn)
 	if err != nil {
 		return err
