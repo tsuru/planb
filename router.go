@@ -32,8 +32,10 @@ type requestData struct {
 	backendLen int
 	backend    string
 	backendIdx int
+	backendKey string
 	host       string
 	debug      bool
+	startTime  time.Time
 }
 
 type Router struct {
@@ -114,7 +116,8 @@ func (router *Router) Stop() {
 
 func (router *Router) getRequestData(req *http.Request, save bool) (*requestData, error) {
 	reqData := &requestData{
-		debug: req.Header.Get("X-Debug-Router") != "",
+		debug:     req.Header.Get("X-Debug-Router") != "",
+		startTime: time.Now(),
 	}
 	req.Header.Del("X-Debug-Router")
 	if save {
@@ -130,7 +133,7 @@ func (router *Router) getRequestData(req *http.Request, save bool) (*requestData
 	}
 	reqData.host = host
 	conn.Send("MULTI")
-	conn.Send("LRANGE", "frontend:"+host, 1, -1)
+	conn.Send("LRANGE", "frontend:"+host, 0, -1)
 	conn.Send("SMEMBERS", "dead:"+host)
 	data, err := conn.Do("EXEC")
 	if err != nil {
@@ -141,10 +144,12 @@ func (router *Router) getRequestData(req *http.Request, save bool) (*requestData
 		return nil, fmt.Errorf("unexpected redis response: %#v", responses)
 	}
 	backends := responses[0].([]interface{})
-	reqData.backendLen = len(backends)
-	if reqData.backendLen == 0 {
+	if len(backends) < 2 {
 		return nil, errors.New("no backends available")
 	}
+	reqData.backendKey = string(backends[0].([]byte))
+	backends = backends[1:]
+	reqData.backendLen = len(backends)
 	deadMembers := responses[1].([]interface{})
 	deadMap := map[uint64]struct{}{}
 	for _, dead := range deadMembers {
@@ -207,7 +212,7 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 	router.ctxMutex.Unlock()
 	var rsp *http.Response
 	var err error
-	t0 := time.Now().UTC()
+	var backendDuration time.Duration
 	if router.RequestTimeout > 0 {
 		time.AfterFunc(router.RequestTimeout, func() {
 			router.Transport.CancelRequest(req)
@@ -224,7 +229,9 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 			Body:          closerBuffer,
 		}
 	} else {
+		t0 := time.Now().UTC()
 		rsp, err = router.Transport.RoundTrip(req)
+		backendDuration = time.Since(t0)
 		if err != nil {
 			logError(err)
 			conn := router.writeRedisPool.Get()
@@ -247,13 +254,19 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 			}
 		}
 	}
-	reqDuration := time.Since(t0)
-	router.logger.MessageRaw(time.Now(), req, rsp, reqDuration)
 	if reqData.debug {
 		rsp.Header.Set("X-Debug-Backend-Url", reqData.backend)
 		rsp.Header.Set("X-Debug-Backend-Id", strconv.FormatUint(uint64(reqData.backendIdx), 10))
 		rsp.Header.Set("X-Debug-Frontend-Key", reqData.host)
 	}
+	router.logger.MessageRaw(&logEntry{
+		now:             time.Now(),
+		req:             req,
+		rsp:             rsp,
+		backendDuration: backendDuration,
+		totalDuration:   time.Since(reqData.startTime),
+		backendKey:      reqData.backendKey,
+	})
 	return rsp, nil
 }
 

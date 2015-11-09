@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -96,7 +97,7 @@ func (s *S) TestRoundTrip(c *check.C) {
 	router.logger.Stop()
 	msgs := strings.Split(buf.String(), "\n")
 	c.Assert(msgs, check.HasLen, 2)
-	c.Assert(msgs[0], check.Matches, ".*? GET / HTTP/1.1 .*?")
+	c.Assert(msgs[0], check.Matches, ".*?GET / HTTP/1.1.*?")
 	c.Assert(msgs[1], check.Equals, "")
 }
 

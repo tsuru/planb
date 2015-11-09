@@ -8,13 +8,15 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
 const (
-	TIME_ALIGNED_NANO = "2006-01-02T15:04:05.000000000Z07:00"
+	TIME_HIPACHE_MODE = "02/Jan/2006:15:04:05 -0700"
 )
 
 type Logger struct {
@@ -25,10 +27,12 @@ type Logger struct {
 }
 
 type logEntry struct {
-	now      time.Time
-	req      *http.Request
-	rsp      *http.Response
-	duration time.Duration
+	now             time.Time
+	req             *http.Request
+	rsp             *http.Response
+	backendDuration time.Duration
+	totalDuration   time.Duration
+	backendKey      string
 }
 
 func NewFileLogger(path string) (*Logger, error) {
@@ -50,14 +54,9 @@ func NewWriterLogger(writer io.WriteCloser) *Logger {
 	return &l
 }
 
-func (l *Logger) MessageRaw(now time.Time, req *http.Request, rsp *http.Response, duration time.Duration) {
+func (l *Logger) MessageRaw(entry *logEntry) {
 	select {
-	case l.logChan <- &logEntry{
-		now:      now,
-		req:      req,
-		rsp:      rsp,
-		duration: duration,
-	}:
+	case l.logChan <- entry:
 	default:
 		select {
 		case <-l.nextNotify:
@@ -77,8 +76,30 @@ func (l *Logger) logWriter() {
 	defer close(l.done)
 	defer l.writer.Close()
 	for el := range l.logChan {
-		nowFormatted := el.now.Format(TIME_ALIGNED_NANO)
-		fmt.Fprintf(l.writer, "%s - - [%s] %s %s %s %d <socketBytesWritten> %s %s <virtualhost> <totaltime> %0.6f\n", el.req.RemoteAddr, nowFormatted, el.req.Method, el.req.URL.Path, el.req.Proto, el.rsp.StatusCode, el.req.Referer(), el.req.UserAgent(), float64(el.duration)/float64(time.Millisecond))
+		nowFormatted := el.now.Format(TIME_HIPACHE_MODE)
+		remoteAddr := el.req.RemoteAddr
+		ip, _, _ := net.SplitHostPort(remoteAddr)
+		if ip == "" {
+			ip = remoteAddr
+		}
+		if !strings.HasPrefix(ip, "::") {
+			ip = "::ffff:" + ip
+		}
+		fmt.Fprintf(l.writer,
+			"%s - - [%s] \"%s %s %s\" %d %d \"%s\" \"%s\" \"%s\" %0.3f %0.3f\n",
+			ip,
+			nowFormatted,
+			el.req.Method,
+			el.req.URL.Path,
+			el.req.Proto,
+			el.rsp.StatusCode,
+			el.rsp.ContentLength,
+			el.req.Referer(),
+			el.req.UserAgent(),
+			el.backendKey,
+			float64(el.totalDuration)/float64(time.Second),
+			float64(el.backendDuration)/float64(time.Second),
+		)
 	}
 }
 
