@@ -38,6 +38,14 @@ type requestData struct {
 	startTime  time.Time
 }
 
+func (r *requestData) String() string {
+	back := r.backend
+	if back == "" {
+		back = "?"
+	}
+	return r.host + " -> " + back
+}
+
 type Router struct {
 	http.Transport
 	ReadRedisHost  string
@@ -115,9 +123,14 @@ func (router *Router) Stop() {
 }
 
 func (router *Router) getRequestData(req *http.Request, save bool) (*requestData, error) {
+	host, _, _ := net.SplitHostPort(req.Host)
+	if host == "" {
+		host = req.Host
+	}
 	reqData := &requestData{
 		debug:     req.Header.Get("X-Debug-Router") != "",
 		startTime: time.Now(),
+		host:      host,
 	}
 	req.Header.Del("X-Debug-Router")
 	if save {
@@ -127,25 +140,20 @@ func (router *Router) getRequestData(req *http.Request, save bool) (*requestData
 	}
 	conn := router.readRedisPool.Get()
 	defer conn.Close()
-	host, _, _ := net.SplitHostPort(req.Host)
-	if host == "" {
-		host = req.Host
-	}
-	reqData.host = host
 	conn.Send("MULTI")
 	conn.Send("LRANGE", "frontend:"+host, 0, -1)
 	conn.Send("SMEMBERS", "dead:"+host)
 	data, err := conn.Do("EXEC")
 	if err != nil {
-		return nil, err
+		return reqData, fmt.Errorf("error running redis commands: %s", err)
 	}
 	responses := data.([]interface{})
 	if len(responses) != 2 {
-		return nil, fmt.Errorf("unexpected redis response: %#v", responses)
+		return reqData, fmt.Errorf("unexpected redis response: %#v", responses)
 	}
 	backends := responses[0].([]interface{})
 	if len(backends) < 2 {
-		return nil, errors.New("no backends available")
+		return reqData, errors.New("no backends available")
 	}
 	reqData.backendKey = string(backends[0].([]byte))
 	backends = backends[1:]
@@ -172,18 +180,21 @@ func (router *Router) getRequestData(req *http.Request, save bool) (*requestData
 	}
 	// We always add, it will eventually overflow to zero which is fine.
 	initialNumber := atomic.AddUint64(roundRobin, 1)
-	initialNumber = initialNumber % uint64(reqData.backendLen)
+	initialNumber = (initialNumber - 1) % uint64(reqData.backendLen)
 	toUseNumber := -1
-	for chosenNumber := initialNumber + 1; chosenNumber != initialNumber; chosenNumber++ {
-		chosenNumber = chosenNumber % uint64(reqData.backendLen)
+	for chosenNumber := initialNumber; ; {
 		_, isDead := deadMap[chosenNumber]
 		if !isDead {
 			toUseNumber = int(chosenNumber)
 			break
 		}
+		chosenNumber = (chosenNumber + 1) % uint64(reqData.backendLen)
+		if chosenNumber == initialNumber {
+			break
+		}
 	}
 	if toUseNumber == -1 {
-		return nil, errors.New("all backends are dead")
+		return reqData, errors.New("all backends are dead")
 	}
 	reqData.backendIdx = toUseNumber
 	reqData.backend = string(backends[toUseNumber].([]byte))
@@ -193,12 +204,12 @@ func (router *Router) getRequestData(req *http.Request, save bool) (*requestData
 func (router *Router) Director(req *http.Request) {
 	reqData, err := router.getRequestData(req, true)
 	if err != nil {
-		logError(err)
+		logError(reqData.String(), err)
 		return
 	}
 	url, err := url.Parse(reqData.backend)
 	if err != nil {
-		logError(err)
+		logError(reqData.String(), fmt.Errorf("invalid backend url: %s", err))
 		return
 	}
 	req.URL.Scheme = url.Scheme
@@ -213,10 +224,13 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 	var rsp *http.Response
 	var err error
 	var backendDuration time.Duration
+	var timedout int32
 	if router.RequestTimeout > 0 {
-		time.AfterFunc(router.RequestTimeout, func() {
+		timer := time.AfterFunc(router.RequestTimeout, func() {
 			router.Transport.CancelRequest(req)
+			atomic.AddInt32(&timedout, 1)
 		})
+		defer timer.Stop()
 	}
 	if req.URL.Scheme == "" || req.URL.Host == "" {
 		closerBuffer := ioutil.NopCloser(bytes.NewBuffer(noRouteData))
@@ -233,7 +247,13 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 		rsp, err = router.Transport.RoundTrip(req)
 		backendDuration = time.Since(t0)
 		if err != nil {
-			logError(err)
+			isTimeout := atomic.LoadInt32(&timedout) == int32(1)
+			if isTimeout {
+				err = fmt.Errorf("request timed out after %v: %s", router.RequestTimeout, err)
+			} else {
+				err = fmt.Errorf("error in backend request: %s", err)
+			}
+			logError(reqData.String(), err)
 			conn := router.writeRedisPool.Get()
 			defer conn.Close()
 			conn.Send("MULTI")
@@ -242,7 +262,7 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 			conn.Send("PUBLISH", "dead", fmt.Sprintf("%s;%s;%d;%d", reqData.host, reqData.backend, reqData.backendIdx, reqData.backendLen))
 			_, redisErr := conn.Do("EXEC")
 			if redisErr != nil {
-				logError(redisErr)
+				logError(reqData.String(), fmt.Errorf("error markind dead backend in redis: %s", redisErr))
 			}
 			rsp = &http.Response{
 				Request:    req,
@@ -270,28 +290,28 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 	return rsp, nil
 }
 
-func (router *Router) serveWebsocket(rw http.ResponseWriter, req *http.Request) error {
+func (router *Router) serveWebsocket(rw http.ResponseWriter, req *http.Request) (*requestData, error) {
 	reqData, err := router.getRequestData(req, false)
 	if err != nil {
-		return err
+		return reqData, err
 	}
 	url, err := url.Parse(reqData.backend)
 	if err != nil {
-		return err
+		return reqData, err
 	}
 	req.Host = url.Host
 	dstConn, err := router.dialer.Dial("tcp", url.Host)
 	if err != nil {
-		return err
+		return reqData, err
 	}
 	defer dstConn.Close()
 	hj, ok := rw.(http.Hijacker)
 	if !ok {
-		return errors.New("not a hijacker")
+		return reqData, errors.New("not a hijacker")
 	}
 	conn, _, err := hj.Hijack()
 	if err != nil {
-		return err
+		return reqData, err
 	}
 	defer conn.Close()
 	if clientIP, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
@@ -302,7 +322,7 @@ func (router *Router) serveWebsocket(rw http.ResponseWriter, req *http.Request) 
 	}
 	err = req.Write(dstConn)
 	if err != nil {
-		return err
+		return reqData, err
 	}
 	errc := make(chan error, 2)
 	cp := func(dst io.Writer, src io.Reader) {
@@ -312,7 +332,7 @@ func (router *Router) serveWebsocket(rw http.ResponseWriter, req *http.Request) 
 	go cp(dstConn, conn)
 	go cp(conn, dstConn)
 	<-errc
-	return nil
+	return reqData, nil
 }
 
 func (router *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
@@ -323,9 +343,9 @@ func (router *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 	upgrade := req.Header.Get("Upgrade")
 	if upgrade != "" && strings.ToLower(upgrade) == "websocket" {
-		err := router.serveWebsocket(rw, req)
+		reqData, err := router.serveWebsocket(rw, req)
 		if err != nil {
-			logError(err)
+			logError(reqData.String(), err)
 			http.Error(rw, "", http.StatusBadGateway)
 		}
 		return
