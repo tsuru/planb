@@ -3,8 +3,8 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"github.com/garyburd/redigo/redis"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/garyburd/redigo/redis"
+	"golang.org/x/net/websocket"
 	"gopkg.in/check.v1"
 )
 
@@ -202,4 +204,64 @@ func (s *S) TestServeHTTPRoundRobin(c *check.C) {
 	router.ServeHTTP(recorder, request2)
 	c.Assert(recorder.Code, check.Equals, http.StatusOK)
 	c.Assert(recorder.Body.String(), check.Equals, "server-3/somewhere")
+}
+
+func (s *S) TestServeHTTPWebSocket(c *check.C) {
+	var servers []*httptest.Server
+	for i := 0; i < 2; i++ {
+		msg := fmt.Sprintf("server-%d", i)
+		srv := httptest.NewServer(websocket.Handler(func(conn *websocket.Conn) {
+			conn.Write([]byte(msg + conn.Request().URL.Path))
+			buf := make([]byte, 5)
+			conn.Read(buf)
+			conn.Write(buf)
+		}))
+		defer srv.Close()
+		servers = append(servers, srv)
+	}
+	var err error
+	_, err = s.redis.Do("RPUSH", "frontend:myfrontend.com", "myfrontend", servers[0].URL, servers[1].URL)
+	c.Assert(err, check.IsNil)
+	router := Router{}
+	err = router.Init()
+	c.Assert(err, check.IsNil)
+	proxyServer := httptest.NewServer(&router)
+	defer proxyServer.Close()
+	dialWS := func() *websocket.Conn {
+		config, err := websocket.NewConfig("ws://myfrontend.com", "ws://localhost/")
+		c.Assert(err, check.IsNil)
+		url, _ := url.Parse(proxyServer.URL)
+		client, err := net.Dial("tcp", url.Host)
+		c.Assert(err, check.IsNil)
+		conn, err := websocket.NewClient(config, client)
+		c.Assert(err, check.IsNil)
+		return conn
+	}
+	msgBuf := make([]byte, 100)
+	conn := dialWS()
+	defer conn.Close()
+	n, err := conn.Read(msgBuf)
+	c.Assert(err, check.IsNil)
+	c.Assert(n, check.Equals, 9)
+	c.Assert(string(msgBuf[:n]), check.Equals, "server-0/")
+	n, err = conn.Write([]byte("12345"))
+	c.Assert(err, check.IsNil)
+	c.Assert(n, check.Equals, 5)
+	n, err = conn.Read(msgBuf)
+	c.Assert(err, check.IsNil)
+	c.Assert(n, check.Equals, 5)
+	c.Assert(string(msgBuf[:n]), check.Equals, "12345")
+	conn = dialWS()
+	defer conn.Close()
+	n, err = conn.Read(msgBuf)
+	c.Assert(err, check.IsNil)
+	c.Assert(n, check.Equals, 9)
+	c.Assert(string(msgBuf[:n]), check.Equals, "server-1/")
+	n, err = conn.Write([]byte("12345"))
+	c.Assert(err, check.IsNil)
+	c.Assert(n, check.Equals, 5)
+	n, err = conn.Read(msgBuf)
+	c.Assert(err, check.IsNil)
+	c.Assert(n, check.Equals, 5)
+	c.Assert(string(msgBuf[:n]), check.Equals, "12345")
 }
