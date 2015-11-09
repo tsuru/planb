@@ -85,7 +85,7 @@ func main() {
 		cli.StringFlag{
 			Name:  "listen, l",
 			Value: "0.0.0.0:8989",
-			Usage: "address to listen",
+			Usage: "Address to listen",
 		},
 		cli.StringFlag{
 			Name:  "read-redis-host",
@@ -106,16 +106,17 @@ func main() {
 		cli.StringFlag{
 			Name:  "access-log",
 			Value: "./access.log",
+			Usage: "File path where access log will be written. If value is `syslog` log will be sent to local syslog.",
 		},
 		cli.IntFlag{
 			Name:  "request-timeout",
 			Value: 30,
-			Usage: "total backend request timeout in seconds",
+			Usage: "Total backend request timeout in seconds",
 		},
 		cli.IntFlag{
 			Name:  "dial-timeout",
 			Value: 10,
-			Usage: "dial backend request timeout in seconds",
+			Usage: "Dial backend request timeout in seconds",
 		},
 	}
 	app.Version = "0.1.0"

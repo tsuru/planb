@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/syslog"
 	"net"
 	"net/http"
 	"os"
@@ -36,11 +37,22 @@ type logEntry struct {
 }
 
 func NewFileLogger(path string) (*Logger, error) {
+	if path == "syslog" {
+		return NewSyslogLogger()
+	}
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0660)
 	if err != nil {
 		return nil, err
 	}
 	return NewWriterLogger(file), nil
+}
+
+func NewSyslogLogger() (*Logger, error) {
+	writer, err := syslog.New(syslog.LOG_INFO|syslog.LOG_LOCAL0, "hipache")
+	if err != nil {
+		return nil, err
+	}
+	return NewWriterLogger(writer), nil
 }
 
 func NewWriterLogger(writer io.WriteCloser) *Logger {
