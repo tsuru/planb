@@ -16,16 +16,16 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/braintree/manners"
 	"github.com/codegangsta/cli"
 )
 
-func handleSignals(router *Router) {
+func handleSignals(server *manners.GracefulServer) {
 	sigChan := make(chan os.Signal, 3)
 	go func() {
 		for sig := range sigChan {
 			if sig == os.Interrupt || sig == os.Kill {
-				router.Stop()
-				os.Exit(0)
+				server.Close()
 			}
 			if sig == syscall.SIGUSR1 {
 				var buf []byte
@@ -76,9 +76,14 @@ func runServer(c *cli.Context) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	handleSignals(&router)
+	s := manners.NewWithServer(&http.Server{Handler: &router})
+	handleSignals(s)
 	log.Printf("Listening on %v...\n", listener.Addr())
-	log.Fatal(http.Serve(listener, &router))
+	err = s.Serve(listener)
+	router.Stop()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func fixUsage(s string) string {
