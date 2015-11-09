@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -66,10 +65,8 @@ func (s *S) TestRoundTrip(c *check.C) {
 	c.Assert(string(data), check.Equals, "my result")
 	router.logger.Stop()
 	msgs := strings.Split(buf.String(), "\n")
-	testUrl, err := url.Parse(ts.URL)
-	c.Assert(err, check.IsNil)
 	c.Assert(msgs, check.HasLen, 2)
-	c.Assert(msgs[0], check.Matches, fmt.Sprintf(`.*? %s GET / 200 in .*? ms`, testUrl.Host))
+	c.Assert(msgs[0], check.Matches, ".*? GET / HTTP/1.1 .*?")
 	c.Assert(msgs[1], check.Equals, "")
 }
 
