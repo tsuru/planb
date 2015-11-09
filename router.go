@@ -2,13 +2,16 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,6 +41,7 @@ type Router struct {
 	LogPath        string
 	RequestTimeout time.Duration
 	rp             *httputil.ReverseProxy
+	dialer         *net.Dialer
 	readRedisPool  *redis.Pool
 	writeRedisPool *redis.Pool
 	logger         *Logger
@@ -85,11 +89,12 @@ func (router *Router) Init() error {
 		}
 	}
 	router.reqCtx = make(map[*http.Request]*requestData)
+	router.dialer = &net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
 	router.Transport = http.Transport{
-		Dial: (&net.Dialer{
-			Timeout:   10 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).Dial,
+		Dial:                router.dialer.Dial,
 		TLSHandshakeTimeout: 10 * time.Second,
 		MaxIdleConnsPerHost: 100,
 	}
@@ -102,14 +107,16 @@ func (router *Router) Stop() {
 	router.logger.Stop()
 }
 
-func (router *Router) Director(req *http.Request) {
+func (router *Router) getRequestData(req *http.Request, save bool) (*requestData, error) {
 	reqData := &requestData{
 		debug: req.Header.Get("X-Debug-Router") != "",
 	}
 	req.Header.Del("X-Debug-Router")
-	router.ctxMutex.Lock()
-	router.reqCtx[req] = reqData
-	router.ctxMutex.Unlock()
+	if save {
+		router.ctxMutex.Lock()
+		router.reqCtx[req] = reqData
+		router.ctxMutex.Unlock()
+	}
 	conn := router.readRedisPool.Get()
 	defer conn.Close()
 	host, _, _ := net.SplitHostPort(req.Host)
@@ -122,18 +129,16 @@ func (router *Router) Director(req *http.Request) {
 	conn.Send("SMEMBERS", "dead:"+host)
 	data, err := conn.Do("EXEC")
 	if err != nil {
-		logError(err)
-		return
+		return nil, err
 	}
 	responses := data.([]interface{})
 	if len(responses) != 2 {
-		logError(fmt.Errorf("unexpected redis response: %#v", responses))
-		return
+		return nil, fmt.Errorf("unexpected redis response: %#v", responses)
 	}
 	backends := responses[0].([]interface{})
 	reqData.backendLen = len(backends)
 	if reqData.backendLen == 0 {
-		return
+		return nil, errors.New("no backends available")
 	}
 	deadMembers := responses[1].([]interface{})
 	deadMap := map[uint64]struct{}{}
@@ -168,10 +173,19 @@ func (router *Router) Director(req *http.Request) {
 		}
 	}
 	if toUseNumber == -1 {
-		return
+		return nil, errors.New("all backends are dead")
 	}
 	reqData.backendIdx = toUseNumber
 	reqData.backend = string(backends[toUseNumber].([]byte))
+	return reqData, nil
+}
+
+func (router *Router) Director(req *http.Request) {
+	reqData, err := router.getRequestData(req, true)
+	if err != nil {
+		logError(err)
+		return
+	}
 	url, err := url.Parse(reqData.backend)
 	if err != nil {
 		logError(err)
@@ -238,10 +252,58 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 	return rsp, nil
 }
 
+func (router *Router) serveWebsocket(rw http.ResponseWriter, req *http.Request) error {
+	reqData, err := router.getRequestData(req, false)
+	if err != nil {
+		return err
+	}
+	url, err := url.Parse(reqData.backend)
+	if err != nil {
+		return err
+	}
+	req.Host = url.Host
+	dstConn, err := router.dialer.Dial("tcp", url.Host)
+	if err != nil {
+		return err
+	}
+	hj, ok := rw.(http.Hijacker)
+	if !ok {
+		return errors.New("not a hijacker")
+	}
+	conn, _, err := hj.Hijack()
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	defer dstConn.Close()
+	err = req.Write(dstConn)
+	if err != nil {
+		return err
+	}
+	errc := make(chan error, 2)
+	cp := func(dst io.Writer, src io.Reader) {
+		_, err := io.Copy(dst, src)
+		errc <- err
+	}
+	go cp(dstConn, conn)
+	go cp(conn, dstConn)
+	<-errc
+	return nil
+}
+
 func (router *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if req.Host == "__ping__" && req.URL.Path == "/" {
 		rw.WriteHeader(http.StatusOK)
 		rw.Write([]byte("OK"))
+		return
+	}
+	upgrade := req.Header.Get("Upgrade")
+	if upgrade != "" && strings.ToLower(upgrade) == "websocket" {
+		err := router.serveWebsocket(rw, req)
+		if err != nil {
+			logError(err)
+			http.Error(rw, "", http.StatusBadGateway)
+		}
 		return
 	}
 	router.rp.ServeHTTP(rw, req)
