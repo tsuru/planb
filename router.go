@@ -55,6 +55,7 @@ type Router struct {
 	LogPath        string
 	DialTimeout    time.Duration
 	RequestTimeout time.Duration
+	DeadBackendTTL int
 	rp             *httputil.ReverseProxy
 	dialer         *net.Dialer
 	readRedisPool  *redis.Pool
@@ -102,6 +103,9 @@ func (router *Router) Init() error {
 		if err != nil {
 			return err
 		}
+	}
+	if router.DeadBackendTTL == 0 {
+		router.DeadBackendTTL = 30
 	}
 	router.reqCtx = make(map[*http.Request]*requestData)
 	router.dialer = &net.Dialer{
@@ -266,7 +270,7 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 				defer conn.Close()
 				conn.Send("MULTI")
 				conn.Send("SADD", "dead:"+reqData.host, reqData.backendIdx)
-				conn.Send("EXPIRE", "dead:"+reqData.host, "30")
+				conn.Send("EXPIRE", "dead:"+reqData.host, router.DeadBackendTTL)
 				conn.Send("PUBLISH", "dead", fmt.Sprintf("%s;%s;%d;%d", reqData.host, reqData.backend, reqData.backendIdx, reqData.backendLen))
 				_, redisErr := conn.Do("EXEC")
 				if redisErr != nil {

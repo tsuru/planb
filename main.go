@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
+	"strings"
 	"syscall"
 	"time"
 
@@ -69,6 +70,7 @@ func runServer(c *cli.Context) {
 		LogPath:        c.String("access-log"),
 		RequestTimeout: time.Duration(c.Int("request-timeout")) * time.Second,
 		DialTimeout:    time.Duration(c.Int("dial-timeout")) * time.Second,
+		DeadBackendTTL: c.Int("dead-backend-time"),
 	}
 	err = router.Init()
 	if err != nil {
@@ -77,6 +79,23 @@ func runServer(c *cli.Context) {
 	handleSignals(&router)
 	log.Printf("Listening on %v...\n", listener.Addr())
 	log.Fatal(http.Serve(listener, &router))
+}
+
+func fixUsage(s string) string {
+	parts := strings.Split(s, " ")
+	currLen := 0
+	lastPart := 0
+	var lines []string
+	for i := range parts {
+		if currLen+len(parts[i])+1 > 55 {
+			lines = append(lines, strings.Join(parts[lastPart:i], " "))
+			currLen = 0
+			lastPart = i
+		}
+		currLen += len(parts[i]) + 1
+	}
+	lines = append(lines, strings.Join(parts[lastPart:], " "))
+	return strings.Join(lines, "\n\t")
 }
 
 func main() {
@@ -106,7 +125,7 @@ func main() {
 		cli.StringFlag{
 			Name:  "access-log",
 			Value: "./access.log",
-			Usage: "File path where access log will be written. If value is `syslog` log will be sent to local syslog.",
+			Usage: fixUsage("File path where access log will be written. If value equals `syslog` log will be sent to local syslog."),
 		},
 		cli.IntFlag{
 			Name:  "request-timeout",
@@ -117,6 +136,11 @@ func main() {
 			Name:  "dial-timeout",
 			Value: 10,
 			Usage: "Dial backend request timeout in seconds",
+		},
+		cli.IntFlag{
+			Name:  "dead-backend-time",
+			Value: 30,
+			Usage: fixUsage("Time in seconds a backend will remain disabled after a network failure."),
 		},
 	}
 	app.Version = "0.1.0"
