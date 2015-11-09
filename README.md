@@ -1,6 +1,8 @@
 GoHipache: a distributed HTTP and websocket proxy
 =================================================
 
+[![Build Status](https://drone.io/github.com/cezarsa/gohipache/status.png)](https://drone.io/github.com/cezarsa/gohipache/latest)
+
 What Is It?
 -----------
 
