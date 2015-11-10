@@ -6,9 +6,18 @@
 	],
 	"Deps": [
 		{
+			"ImportPath": "github.com/braintree/manners",
+			"Comment": "0.4.0-7-gcab36f9",
+			"Rev": "cab36f97339b1925cd89e158632728025557e550"
+		},
+		{
 			"ImportPath": "github.com/codegangsta/cli",
 			"Comment": "1.2.0-163-g70e3fa5",
 			"Rev": "70e3fa51ebed95df8c0fbe1519c1c1f9bc16bb13"
+		},
+		{
+			"ImportPath": "github.com/garyburd/redigo/internal",
+			"Rev": "6ece6e0a09f28cc399b21550cbf37ab39ba63cce"
 		},
 		{
 			"ImportPath": "github.com/garyburd/redigo/redis",
