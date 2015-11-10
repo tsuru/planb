@@ -1,0 +1,20 @@
+language: go
+sudo: required
+go:
+  - 1.5.1
+  - tip
+env:
+  global:
+    - PATH="$GOPATH/bin:$PATH"
+  matrix:
+    - GOARCH=amd64
+install:
+  - go get -x github.com/tools/godep
+  - godep restore ./...
+script:
+  - go test ./...
+  - go build
+after_success:
+  - travis/docker_image.bash
+services:
+  - docker
