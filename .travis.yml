@@ -17,4 +17,5 @@ script:
 after_success:
   - travis/docker_image.bash
 services:
+  - redis-server
   - docker
