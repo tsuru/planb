@@ -1,5 +1,5 @@
 {
-	"ImportPath": "github.com/cezarsa/gohipache",
+	"ImportPath": "github.com/tsuru/planb",
 	"GoVersion": "go1.5",
 	"Packages": [
 		"./..."

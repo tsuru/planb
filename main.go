@@ -40,8 +40,8 @@ func handleSignals(server *manners.GracefulServer) {
 			}
 			if sig == syscall.SIGUSR2 {
 				go func() {
-					cpufile, _ := os.OpenFile("./gohipache_cpu.pprof", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
-					memfile, _ := os.OpenFile("./gohipache_mem.pprof", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
+					cpufile, _ := os.OpenFile("./planb_cpu.pprof", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
+					memfile, _ := os.OpenFile("./planb_mem.pprof", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
 					log.Println("enabling profile...")
 					pprof.WriteHeapProfile(memfile)
 					memfile.Close()
@@ -149,10 +149,10 @@ func main() {
 		},
 	}
 	app.Version = "0.1.0"
-	app.Name = "gohipache"
+	app.Name = "planb"
 	app.Usage = "http and websockets reverse proxy"
 	app.Action = runServer
 	app.Author = "tsuru team"
-	app.Email = "https://github.com/tsuru/gohipache"
+	app.Email = "https://github.com/tsuru/planb"
 	app.Run(os.Args)
 }
