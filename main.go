@@ -148,7 +148,7 @@ func main() {
 			Usage: fixUsage("Time in seconds a backend will remain disabled after a network failure."),
 		},
 	}
-	app.Version = "0.1.0"
+	app.Version = "0.1.1"
 	app.Name = "planb"
 	app.Usage = "http and websockets reverse proxy"
 	app.Action = runServer
