@@ -208,12 +208,12 @@ func (router *Router) getRequestData(req *http.Request, save bool) (*requestData
 func (router *Router) Director(req *http.Request) {
 	reqData, err := router.getRequestData(req, true)
 	if err != nil {
-		logError(reqData.String(), err)
+		logError(reqData.String(), req.URL.Path, err)
 		return
 	}
 	url, err := url.Parse(reqData.backend)
 	if err != nil {
-		logError(reqData.String(), fmt.Errorf("invalid backend url: %s", err))
+		logError(reqData.String(), req.URL.Path, fmt.Errorf("invalid backend url: %s", err))
 		return
 	}
 	req.URL.Scheme = url.Scheme
@@ -265,7 +265,7 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 			if markAsDead {
 				err = fmt.Errorf("%s *DEAD*", err)
 			}
-			logError(reqData.String(), err)
+			logError(reqData.String(), req.URL.Path, err)
 			if markAsDead {
 				conn := router.writeRedisPool.Get()
 				defer conn.Close()
@@ -275,7 +275,7 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 				conn.Send("PUBLISH", "dead", fmt.Sprintf("%s;%s;%d;%d", reqData.host, reqData.backend, reqData.backendIdx, reqData.backendLen))
 				_, redisErr := conn.Do("EXEC")
 				if redisErr != nil {
-					logError(reqData.String(), fmt.Errorf("error markind dead backend in redis: %s", redisErr))
+					logError(reqData.String(), req.URL.Path, fmt.Errorf("error markind dead backend in redis: %s", redisErr))
 				}
 			}
 			rsp = &http.Response{
@@ -359,7 +359,7 @@ func (router *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if upgrade != "" && strings.ToLower(upgrade) == "websocket" {
 		reqData, err := router.serveWebsocket(rw, req)
 		if err != nil {
-			logError(reqData.String(), err)
+			logError(reqData.String(), req.URL.Path, err)
 			http.Error(rw, "", http.StatusBadGateway)
 		}
 		return

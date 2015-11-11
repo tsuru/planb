@@ -115,6 +115,6 @@ func (l *Logger) logWriter() {
 	}
 }
 
-func logError(location string, err error) {
-	log.Print("ERROR in ", location, " - ", err.Error())
+func logError(location string, path string, err error, extra ...string) {
+	log.Print("ERROR in ", location, " - ", path, " - ", err.Error())
 }
