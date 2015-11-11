@@ -257,6 +257,7 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 			}
 			isTimeout := atomic.LoadInt32(&timedout) == int32(1)
 			if isTimeout {
+				markAsDead = false
 				err = fmt.Errorf("request timed out after %v: %s", router.RequestTimeout, err)
 			} else {
 				err = fmt.Errorf("error in backend request: %s", err)
