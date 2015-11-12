@@ -2,6 +2,7 @@ PlanB: a distributed HTTP and websocket proxy
 =================================================
 
 [![Build Status](https://drone.io/github.com/tsuru/planb/status.png)](https://drone.io/github.com/tsuru/planb/latest)
+[![Build Status](https://travis-ci.org/tsuru/planb.svg?branch=master)](https://travis-ci.org/tsuru/planb)
 
 What Is It?
 -----------
