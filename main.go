@@ -71,6 +71,7 @@ func runServer(c *cli.Context) {
 		RequestTimeout: time.Duration(c.Int("request-timeout")) * time.Second,
 		DialTimeout:    time.Duration(c.Int("dial-timeout")) * time.Second,
 		DeadBackendTTL: c.Int("dead-backend-time"),
+		FlushInterval:  time.Duration(c.Int("flush-interval")) * time.Millisecond,
 	}
 	err = router.Init()
 	if err != nil {
@@ -146,6 +147,11 @@ func main() {
 			Name:  "dead-backend-time",
 			Value: 30,
 			Usage: fixUsage("Time in seconds a backend will remain disabled after a network failure."),
+		},
+		cli.IntFlag{
+			Name:  "flush-interval",
+			Value: 10,
+			Usage: fixUsage("Time in milliseconds to flush the proxied request."),
 		},
 	}
 	app.Version = "0.1.1"

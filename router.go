@@ -56,6 +56,7 @@ type Router struct {
 	DialTimeout    time.Duration
 	RequestTimeout time.Duration
 	DeadBackendTTL int
+	FlushInterval  time.Duration
 	rp             *httputil.ReverseProxy
 	dialer         *net.Dialer
 	readRedisPool  *redis.Pool
@@ -118,7 +119,11 @@ func (router *Router) Init() error {
 		MaxIdleConnsPerHost: 100,
 	}
 	router.roundRobin = make(map[string]*uint64)
-	router.rp = &httputil.ReverseProxy{Director: router.Director, Transport: router}
+	router.rp = &httputil.ReverseProxy{
+		Director:      router.Director,
+		Transport:     router,
+		FlushInterval: router.FlushInterval,
+	}
 	return nil
 }
 
