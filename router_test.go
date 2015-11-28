@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/garyburd/redigo/redis"
 	"golang.org/x/net/websocket"
@@ -61,9 +62,10 @@ func (s *S) TestInit(c *check.C) {
 	ptr2 := reflect.ValueOf(router.Director).Pointer()
 	c.Assert(ptr1, check.Equals, ptr2)
 	c.Assert(router.rp.Transport, check.Equals, &router)
-	c.Assert(router.readRedisPool, check.Not(check.IsNil))
-	c.Assert(router.writeRedisPool, check.Not(check.IsNil))
-	c.Assert(router.logger, check.Not(check.IsNil))
+	c.Assert(router.readRedisPool, check.NotNil)
+	c.Assert(router.writeRedisPool, check.NotNil)
+	c.Assert(router.logger, check.NotNil)
+	c.Assert(router.cache, check.NotNil)
 }
 
 type BufferCloser struct {
@@ -206,6 +208,55 @@ func (s *S) TestServeHTTPRoundRobin(c *check.C) {
 	router.ServeHTTP(recorder, request2)
 	c.Assert(recorder.Code, check.Equals, http.StatusOK)
 	c.Assert(recorder.Body.String(), check.Equals, "server-3/somewhere")
+}
+
+func (s *S) TestServeHTTPCache(c *check.C) {
+	var servers []*httptest.Server
+	for i := 0; i < 3; i++ {
+		msg := fmt.Sprintf("server-%d", i)
+		srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+			rw.Write([]byte(msg + req.URL.Path))
+		}))
+		defer srv.Close()
+		servers = append(servers, srv)
+	}
+	_, err := s.redis.Do("RPUSH", "frontend:myfrontend.com", "myfrontend", servers[0].URL, servers[1].URL)
+	c.Assert(err, check.IsNil)
+	router := Router{}
+	err = router.Init()
+	c.Assert(err, check.IsNil)
+	request, err := http.NewRequest("GET", "http://myfrontend.com/somewhere", nil)
+	c.Assert(err, check.IsNil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	c.Assert(recorder.Code, check.Equals, http.StatusOK)
+	c.Assert(recorder.Body.String(), check.Equals, "server-0/somewhere")
+	_, ok := router.cache.Peek("myfrontend.com")
+	c.Assert(ok, check.Equals, true)
+	router.cache.Add("myfrontend.com", backendSet{
+		id:       "myfrontend",
+		backends: []string{servers[2].URL},
+		dead:     nil,
+		expires:  time.Now().Add(time.Hour),
+	})
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	c.Assert(recorder.Code, check.Equals, http.StatusOK)
+	c.Assert(recorder.Body.String(), check.Equals, "server-2/somewhere")
+	router.cache.Add("myfrontend.com", backendSet{
+		id:       "myfrontend",
+		backends: []string{servers[2].URL},
+		dead:     nil,
+		expires:  time.Now().Add(-2*time.Second - 1),
+	})
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	c.Assert(recorder.Code, check.Equals, http.StatusOK)
+	c.Assert(recorder.Body.String(), check.Equals, "server-0/somewhere")
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	c.Assert(recorder.Code, check.Equals, http.StatusOK)
+	c.Assert(recorder.Body.String(), check.Equals, "server-1/somewhere")
 }
 
 func (s *S) TestServeHTTPWebSocket(c *check.C) {

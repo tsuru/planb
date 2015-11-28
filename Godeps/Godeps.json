@@ -1,9 +1,6 @@
 {
 	"ImportPath": "github.com/tsuru/planb",
-	"GoVersion": "go1.5",
-	"Packages": [
-		"./..."
-	],
+	"GoVersion": "go1.5.1",
 	"Deps": [
 		{
 			"ImportPath": "github.com/braintree/manners",
@@ -16,12 +13,12 @@
 			"Rev": "70e3fa51ebed95df8c0fbe1519c1c1f9bc16bb13"
 		},
 		{
-			"ImportPath": "github.com/garyburd/redigo/internal",
+			"ImportPath": "github.com/garyburd/redigo/redis",
 			"Rev": "6ece6e0a09f28cc399b21550cbf37ab39ba63cce"
 		},
 		{
-			"ImportPath": "github.com/garyburd/redigo/redis",
-			"Rev": "6ece6e0a09f28cc399b21550cbf37ab39ba63cce"
+			"ImportPath": "github.com/hashicorp/golang-lru",
+			"Rev": "8e9be5c724e21eb7e1e35b170761707bf2bcec04"
 		},
 		{
 			"ImportPath": "golang.org/x/net/websocket",

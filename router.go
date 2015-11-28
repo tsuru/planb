@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/garyburd/redigo/redis"
+	"github.com/hashicorp/golang-lru"
 )
 
 var (
@@ -66,6 +67,7 @@ type Router struct {
 	reqCtx         map[*http.Request]*requestData
 	rrMutex        sync.RWMutex
 	roundRobin     map[string]*uint64
+	cache          *lru.Cache
 }
 
 func redisDialer(host string, port int) func() (redis.Conn, error) {
@@ -85,6 +87,7 @@ func redisDialer(host string, port int) func() (redis.Conn, error) {
 }
 
 func (router *Router) Init() error {
+	var err error
 	if router.LogPath == "" {
 		router.LogPath = "./access.log"
 	}
@@ -99,7 +102,6 @@ func (router *Router) Init() error {
 		Dial:        redisDialer(router.WriteRedisHost, router.WriteRedisPort),
 	}
 	if router.logger == nil {
-		var err error
 		router.logger, err = NewFileLogger(router.LogPath)
 		if err != nil {
 			return err
@@ -107,6 +109,12 @@ func (router *Router) Init() error {
 	}
 	if router.DeadBackendTTL == 0 {
 		router.DeadBackendTTL = 30
+	}
+	if router.cache == nil {
+		router.cache, err = lru.New(100)
+		if err != nil {
+			return err
+		}
 	}
 	router.reqCtx = make(map[*http.Request]*requestData)
 	router.dialer = &net.Dialer{
@@ -131,6 +139,60 @@ func (router *Router) Stop() {
 	router.logger.Stop()
 }
 
+type backendSet struct {
+	id       string
+	backends []string
+	dead     map[uint64]struct{}
+	expires  time.Time
+}
+
+func (s *backendSet) Expired() bool {
+	return time.Now().After(s.expires)
+}
+
+func (router *Router) getBackends(host string) (*backendSet, error) {
+	if data, ok := router.cache.Get(host); ok {
+		set := data.(backendSet)
+		if !set.Expired() {
+			return &set, nil
+		}
+	}
+	var set backendSet
+	conn := router.readRedisPool.Get()
+	defer conn.Close()
+	conn.Send("MULTI")
+	conn.Send("LRANGE", "frontend:"+host, 0, -1)
+	conn.Send("SMEMBERS", "dead:"+host)
+	data, err := conn.Do("EXEC")
+	if err != nil {
+		return nil, fmt.Errorf("error running redis commands: %s", err)
+	}
+	responses := data.([]interface{})
+	if len(responses) != 2 {
+		return nil, fmt.Errorf("unexpected redis response: %#v", responses)
+	}
+	backends := responses[0].([]interface{})
+	if len(backends) < 2 {
+		return nil, errors.New("no backends available")
+	}
+	set.id = string(backends[0].([]byte))
+	backends = backends[1:]
+	set.backends = make([]string, len(backends))
+	for i, backend := range backends {
+		set.backends[i] = string(backend.([]byte))
+	}
+	deadMembers := responses[1].([]interface{})
+	deadMap := map[uint64]struct{}{}
+	for _, dead := range deadMembers {
+		deadIdx, _ := strconv.ParseUint(string(dead.([]byte)), 10, 64)
+		deadMap[deadIdx] = struct{}{}
+	}
+	set.dead = deadMap
+	set.expires = time.Now().Add(2 * time.Second)
+	router.cache.Add(host, set)
+	return &set, nil
+}
+
 func (router *Router) getRequestData(req *http.Request, save bool) (*requestData, error) {
 	host, _, _ := net.SplitHostPort(req.Host)
 	if host == "" {
@@ -147,32 +209,12 @@ func (router *Router) getRequestData(req *http.Request, save bool) (*requestData
 		router.reqCtx[req] = reqData
 		router.ctxMutex.Unlock()
 	}
-	conn := router.readRedisPool.Get()
-	defer conn.Close()
-	conn.Send("MULTI")
-	conn.Send("LRANGE", "frontend:"+host, 0, -1)
-	conn.Send("SMEMBERS", "dead:"+host)
-	data, err := conn.Do("EXEC")
+	set, err := router.getBackends(host)
 	if err != nil {
-		return reqData, fmt.Errorf("error running redis commands: %s", err)
+		return reqData, err
 	}
-	responses := data.([]interface{})
-	if len(responses) != 2 {
-		return reqData, fmt.Errorf("unexpected redis response: %#v", responses)
-	}
-	backends := responses[0].([]interface{})
-	if len(backends) < 2 {
-		return reqData, errors.New("no backends available")
-	}
-	reqData.backendKey = string(backends[0].([]byte))
-	backends = backends[1:]
-	reqData.backendLen = len(backends)
-	deadMembers := responses[1].([]interface{})
-	deadMap := map[uint64]struct{}{}
-	for _, dead := range deadMembers {
-		deadIdx, _ := strconv.ParseUint(string(dead.([]byte)), 10, 64)
-		deadMap[deadIdx] = struct{}{}
-	}
+	reqData.backendKey = set.id
+	reqData.backendLen = len(set.backends)
 	router.rrMutex.RLock()
 	roundRobin := router.roundRobin[host]
 	if roundRobin == nil {
@@ -192,7 +234,7 @@ func (router *Router) getRequestData(req *http.Request, save bool) (*requestData
 	initialNumber = (initialNumber - 1) % uint64(reqData.backendLen)
 	toUseNumber := -1
 	for chosenNumber := initialNumber; ; {
-		_, isDead := deadMap[chosenNumber]
+		_, isDead := set.dead[chosenNumber]
 		if !isDead {
 			toUseNumber = int(chosenNumber)
 			break
@@ -206,7 +248,7 @@ func (router *Router) getRequestData(req *http.Request, save bool) (*requestData
 		return reqData, errors.New("all backends are dead")
 	}
 	reqData.backendIdx = toUseNumber
-	reqData.backend = string(backends[toUseNumber].([]byte))
+	reqData.backend = set.backends[toUseNumber]
 	return reqData, nil
 }
 
