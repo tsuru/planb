@@ -154,7 +154,7 @@ func main() {
 			Usage: fixUsage("Time in milliseconds to flush the proxied request."),
 		},
 	}
-	app.Version = "0.1.2"
+	app.Version = "0.1.3"
 	app.Name = "planb"
 	app.Usage = "http and websockets reverse proxy"
 	app.Action = runServer
