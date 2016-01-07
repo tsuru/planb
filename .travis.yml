@@ -6,12 +6,9 @@ go:
   - tip
 env:
   global:
-    - PATH="$GOPATH/bin:$PATH"
+    - GO15VENDOREXPERIMENT=1
   matrix:
     - GOARCH=amd64
-install:
-  - go get -x github.com/tools/godep
-  - godep restore ./...
 script:
   - go test ./...
   - go build -ldflags "-linkmode external -extldflags -static"
