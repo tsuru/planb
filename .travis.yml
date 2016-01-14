@@ -1,7 +1,7 @@
 language: go
 sudo: required
 go:
-  - 1.5.2
+  - 1.5.3
   - 1.6beta1
   - tip
 env:
