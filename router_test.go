@@ -318,3 +318,82 @@ func (s *S) TestServeHTTPWebSocket(c *check.C) {
 	c.Assert(n, check.Equals, 5)
 	c.Assert(string(msgBuf[:n]), check.Equals, "12345")
 }
+
+func (s *S) TestDirectorRequestIDHeaderNotNil(c *check.C) {
+	msg := fmt.Sprintf("server-1")
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		rw.Write([]byte(msg + req.URL.Path))
+	}))
+	var err error
+	_, err = s.redis.Do("RPUSH", "frontend:myfrontend.com", "myfrontend", srv.URL)
+	c.Assert(err, check.IsNil)
+	router := Router{
+		RequestIDHeader: "Xpto",
+	}
+	err = router.Init()
+	c.Assert(err, check.IsNil)
+	request, err := http.NewRequest("GET", "http://myfrontend.com/somewhere", nil)
+	c.Assert(err, check.IsNil)
+	router.Director(request)
+	c.Assert(request.Header.Get(router.RequestIDHeader), check.NotNil)
+}
+
+func (s *S) TestDirectorRequestIDHeaderIsSetWhenItCamesEmpty(c *check.C) {
+	msg := fmt.Sprintf("server-1")
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		rw.Write([]byte(msg + req.URL.Path))
+	}))
+	var err error
+	_, err = s.redis.Do("RPUSH", "frontend:myfrontend.com", "myfrontend", srv.URL)
+	c.Assert(err, check.IsNil)
+	router := Router{
+		RequestIDHeader: "Xpto",
+	}
+	err = router.Init()
+	c.Assert(err, check.IsNil)
+	request, err := http.NewRequest("GET", "http://myfrontend.com/somewhere", nil)
+	c.Assert(err, check.IsNil)
+	id := ""
+	request.Header.Set(router.RequestIDHeader, id)
+	router.Director(request)
+	c.Assert(request.Header.Get(router.RequestIDHeader), check.Not(check.Equals), "")
+}
+
+func (s *S) TestDirectorRequestIDHeaderNotChangedWhenAlreadyExists(c *check.C) {
+	msg := fmt.Sprintf("server-1")
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		rw.Write([]byte(msg + req.URL.Path))
+	}))
+	var err error
+	_, err = s.redis.Do("RPUSH", "frontend:myfrontend.com", "myfrontend", srv.URL)
+	c.Assert(err, check.IsNil)
+	router := Router{
+		RequestIDHeader: "Xpto",
+	}
+	err = router.Init()
+	c.Assert(err, check.IsNil)
+	request, err := http.NewRequest("GET", "http://myfrontend.com/somewhere", nil)
+	c.Assert(err, check.IsNil)
+	id := "12345abcd"
+	request.Header.Set(router.RequestIDHeader, id)
+	router.Director(request)
+	c.Assert(request.Header.Get(router.RequestIDHeader), check.Equals, "12345abcd")
+}
+
+func (s *S) TestDirectorRequestIDHeaderDoesNothingIfFlagIsNotSet(c *check.C) {
+	msg := fmt.Sprintf("server-1")
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		rw.Write([]byte(msg + req.URL.Path))
+	}))
+	var err error
+	_, err = s.redis.Do("RPUSH", "frontend:myfrontend.com", "myfrontend", srv.URL)
+	c.Assert(err, check.IsNil)
+	router := Router{}
+	err = router.Init()
+	c.Assert(err, check.IsNil)
+	request, err := http.NewRequest("GET", "http://myfrontend.com/somewhere", nil)
+	c.Assert(err, check.IsNil)
+	router.Director(request)
+	c.Assert(router.RequestIDHeader, check.Equals, "")
+	c.Assert(request.Header.Get(router.RequestIDHeader), check.Equals, "")
+}

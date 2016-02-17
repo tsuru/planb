@@ -22,6 +22,7 @@ import (
 
 	"github.com/garyburd/redigo/redis"
 	"github.com/hashicorp/golang-lru"
+	"github.com/nu7hatch/gouuid"
 )
 
 var (
@@ -49,25 +50,26 @@ func (r *requestData) String() string {
 
 type Router struct {
 	http.Transport
-	ReadRedisHost  string
-	ReadRedisPort  int
-	WriteRedisHost string
-	WriteRedisPort int
-	LogPath        string
-	DialTimeout    time.Duration
-	RequestTimeout time.Duration
-	DeadBackendTTL int
-	FlushInterval  time.Duration
-	rp             *httputil.ReverseProxy
-	dialer         *net.Dialer
-	readRedisPool  *redis.Pool
-	writeRedisPool *redis.Pool
-	logger         *Logger
-	ctxMutex       sync.Mutex
-	reqCtx         map[*http.Request]*requestData
-	rrMutex        sync.RWMutex
-	roundRobin     map[string]*uint64
-	cache          *lru.Cache
+	ReadRedisHost   string
+	ReadRedisPort   int
+	WriteRedisHost  string
+	WriteRedisPort  int
+	LogPath         string
+	DialTimeout     time.Duration
+	RequestTimeout  time.Duration
+	DeadBackendTTL  int
+	FlushInterval   time.Duration
+	RequestIDHeader string
+	rp              *httputil.ReverseProxy
+	dialer          *net.Dialer
+	readRedisPool   *redis.Pool
+	writeRedisPool  *redis.Pool
+	logger          *Logger
+	ctxMutex        sync.Mutex
+	reqCtx          map[*http.Request]*requestData
+	rrMutex         sync.RWMutex
+	roundRobin      map[string]*uint64
+	cache           *lru.Cache
 }
 
 func redisDialer(host string, port int) func() (redis.Conn, error) {
@@ -265,6 +267,15 @@ func (router *Router) Director(req *http.Request) {
 	}
 	req.URL.Scheme = url.Scheme
 	req.URL.Host = url.Host
+	if router.RequestIDHeader != "" && req.Header.Get(router.RequestIDHeader) == "" {
+		unparsedID, err := uuid.NewV4()
+		if err != nil {
+			fmt.Println("error:", err)
+			return
+		}
+		uniqueID := unparsedID.String()
+		req.Header.Set(router.RequestIDHeader, uniqueID)
+	}
 }
 
 func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {

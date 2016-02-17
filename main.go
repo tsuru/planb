@@ -63,15 +63,16 @@ func runServer(c *cli.Context) {
 		log.Fatal(err)
 	}
 	router := Router{
-		ReadRedisHost:  c.String("read-redis-host"),
-		ReadRedisPort:  c.Int("read-redis-port"),
-		WriteRedisHost: c.String("write-redis-host"),
-		WriteRedisPort: c.Int("write-redis-port"),
-		LogPath:        c.String("access-log"),
-		RequestTimeout: time.Duration(c.Int("request-timeout")) * time.Second,
-		DialTimeout:    time.Duration(c.Int("dial-timeout")) * time.Second,
-		DeadBackendTTL: c.Int("dead-backend-time"),
-		FlushInterval:  time.Duration(c.Int("flush-interval")) * time.Millisecond,
+		ReadRedisHost:   c.String("read-redis-host"),
+		ReadRedisPort:   c.Int("read-redis-port"),
+		WriteRedisHost:  c.String("write-redis-host"),
+		WriteRedisPort:  c.Int("write-redis-port"),
+		LogPath:         c.String("access-log"),
+		RequestTimeout:  time.Duration(c.Int("request-timeout")) * time.Second,
+		DialTimeout:     time.Duration(c.Int("dial-timeout")) * time.Second,
+		DeadBackendTTL:  c.Int("dead-backend-time"),
+		FlushInterval:   time.Duration(c.Int("flush-interval")) * time.Millisecond,
+		RequestIDHeader: c.String("request-id-header"),
 	}
 	err = router.Init()
 	if err != nil {
@@ -152,6 +153,9 @@ func main() {
 			Name:  "flush-interval",
 			Value: 10,
 			Usage: fixUsage("Time in milliseconds to flush the proxied request."),
+		},
+		cli.StringFlag{
+			Name: "request-id-header",
 		},
 	}
 	app.Version = "0.1.3"
