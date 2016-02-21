@@ -37,3 +37,10 @@ The following flags are available for configuring PlanB on start-up:
   a network failure. Default value is ``30``.
 - ``--flush-interval``: Time in milliseconds to flush the proxied request.
   Default value is ``10``.
+
+## Features
+
+* Load-Balancing
+* Dead Backend Detection
+* Dynamic Configuration
+* WebSocket
