@@ -86,7 +86,8 @@ $ redis-cli lrange frontend:www.tsuru.io 0 -1
 2) "http://192.168.0.42:80"
 3) "http://192.168.0.43:80"
 ```
-                                                                                While the server is running, any of these steps can be
+
+While the server is running, any of these steps can be
 re-run without messing up with the traffic.
 
 ## Links
