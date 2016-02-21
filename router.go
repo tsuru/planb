@@ -274,7 +274,7 @@ func (router *Router) Director(req *http.Request) {
 	if router.RequestIDHeader != "" && req.Header.Get(router.RequestIDHeader) == "" {
 		unparsedID, err := uuid.NewV4()
 		if err != nil {
-			fmt.Println("error:", err)
+			logError(reqData.String(), req.URL.Path, fmt.Errorf("unable to generate request id: %s", err))
 			return
 		}
 		uniqueID := unparsedID.String()
