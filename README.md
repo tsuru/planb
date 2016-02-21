@@ -44,3 +44,8 @@ The following flags are available for configuring PlanB on start-up:
 * Dead Backend Detection
 * Dynamic Configuration
 * WebSocket
+
+## Links
+
+* Repository & Issue Tracker: https://github.com/tsuru/planb
+* Talk to us on Gitter: https://gitter.im/tsuru/tsuru
