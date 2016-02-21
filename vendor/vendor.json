@@ -33,6 +33,11 @@
 			"revisionTime": "2015-11-23T13:01:00-08:00"
 		},
 		{
+			"path": "github.com/nu7hatch/gouuid",
+			"revision": "179d4d0c4d8d407a32af483c2354df1d2c91e6c3",
+			"revisionTime": "2013-12-21T12:05:32-08:00"
+		},
+		{
 			"path": "golang.org/x/net/websocket",
 			"revision": "042ba42fa6633b34205efc66ba5719cd3afd8d38",
 			"revisionTime": "2015-11-08T11:16:06+01:00"
