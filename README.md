@@ -51,7 +51,7 @@ The easiest way to install PlanB is to pull the trusted build from the hub.docke
 
 ```
 # run Redis
-docker run -d -p 6379:6379 --net=host redis
+docker run -d -p 6379:6379 redis
 
 # run PlanB
 docker run -d --net=host tsuru/planb:v1 --listen ":80"
