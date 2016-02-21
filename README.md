@@ -1,10 +1,8 @@
-PlanB: a distributed HTTP and websocket proxy
-=================================================
+# PlanB: a distributed HTTP and websocket proxy
 
 [![Build Status](https://travis-ci.org/tsuru/planb.svg?branch=master)](https://travis-ci.org/tsuru/planb)
 
-What Is It?
------------
+## What Is It?
 
 PlanB is a HTTP and websocket proxy backed by Redis and inspired by
 [Hipache](https://github.com/dotcloud/hipache).
@@ -14,8 +12,7 @@ The same format is used for all keys stored in Redis so migrating from Hipache
 to PlanB should be completely seamless. The process should be as simple as
 replacing Hipache's executable for PlanB.
 
-Start-up flags
---------------
+## Start-up flags
 
 The following flags are available for configuring PlanB on start-up:
 
