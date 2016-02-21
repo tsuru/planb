@@ -172,13 +172,12 @@ func (s *S) TestServeHTTPStress(c *check.C) {
 	var logOutput bytes.Buffer
 	log.SetOutput(&logOutput)
 	defer log.SetOutput(nil)
-	router := Router{
-		DialTimeout: 1 * time.Second,
-	}
+	router := Router{}
 	err := router.Init()
 	c.Assert(err, check.IsNil)
 	wg := sync.WaitGroup{}
-	for i := 0; i < 50; i++ {
+	nConnections := 50
+	for i := 0; i < nConnections; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -198,6 +197,11 @@ func (s *S) TestServeHTTPStress(c *check.C) {
 	case <-done:
 	case <-time.After(time.Minute):
 		c.Fatal("timeout out after 1 minute")
+	}
+	logParts := strings.Split(logOutput.String(), "\n")
+	c.Assert(logParts, check.HasLen, nConnections+1)
+	for _, part := range logParts[:nConnections] {
+		c.Assert(part, check.Matches, ".*no backends available$")
 	}
 }
 

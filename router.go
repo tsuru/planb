@@ -254,6 +254,8 @@ func (router *Router) getRequestData(req *http.Request, save bool) (*requestData
 }
 
 func (router *Router) Director(req *http.Request) {
+	req.URL.Scheme = ""
+	req.URL.Host = ""
 	reqData, err := router.getRequestData(req, true)
 	if err != nil {
 		logError(reqData.String(), req.URL.Path, err)
