@@ -161,10 +161,9 @@ func (router *Router) getBackends(host string) (*backendSet, error) {
 	var set backendSet
 	conn := router.readRedisPool.Get()
 	defer conn.Close()
-	conn.Send("MULTI")
 	conn.Send("LRANGE", "frontend:"+host, 0, -1)
 	conn.Send("SMEMBERS", "dead:"+host)
-	data, err := conn.Do("EXEC")
+	data, err := conn.Do("")
 	if err != nil {
 		return nil, fmt.Errorf("error running redis commands: %s", err)
 	}
@@ -332,11 +331,10 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 			if markAsDead {
 				conn := router.writeRedisPool.Get()
 				defer conn.Close()
-				conn.Send("MULTI")
 				conn.Send("SADD", "dead:"+reqData.host, reqData.backendIdx)
 				conn.Send("EXPIRE", "dead:"+reqData.host, router.DeadBackendTTL)
 				conn.Send("PUBLISH", "dead", fmt.Sprintf("%s;%s;%d;%d", reqData.host, reqData.backend, reqData.backendIdx, reqData.backendLen))
-				_, redisErr := conn.Do("EXEC")
+				_, redisErr := conn.Do("")
 				if redisErr != nil {
 					logError(reqData.String(), req.URL.Path, fmt.Errorf("error markind dead backend in redis: %s", redisErr))
 				}

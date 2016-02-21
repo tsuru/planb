@@ -296,6 +296,35 @@ func (s *S) TestServeHTTPRoundRobin(c *check.C) {
 	checkReq("http://otherfrontend.com/somewhere", "server-3/somewhere")
 }
 
+func (s *S) TestServeHTTPRoundRobinMarksDead(c *check.C) {
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		rw.Write([]byte("hit"))
+	}))
+	defer srv.Close()
+	_, err := s.redis.Do("RPUSH", "frontend:mixfrontend.com", "mixfrontend", srv.URL, "http://127.0.0.1:34291")
+	c.Assert(err, check.IsNil)
+	router := Router{
+		DialTimeout: time.Second,
+	}
+	err = router.Init()
+	c.Assert(err, check.IsNil)
+	checkReq := func(url string, code int, expected string) {
+		request, err := http.NewRequest("GET", url, nil)
+		c.Assert(err, check.IsNil)
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, request)
+		c.Assert(recorder.Code, check.Equals, code)
+		c.Assert(recorder.Body.String(), check.Equals, expected)
+		router.cache.Purge()
+	}
+	checkReq("http://mixfrontend.com/somewhere", http.StatusOK, "hit")
+	checkReq("http://mixfrontend.com/somewhere", http.StatusServiceUnavailable, "")
+	checkReq("http://mixfrontend.com/somewhere", http.StatusOK, "hit")
+	checkReq("http://mixfrontend.com/somewhere", http.StatusOK, "hit")
+	checkReq("http://mixfrontend.com/somewhere", http.StatusOK, "hit")
+	checkReq("http://mixfrontend.com/somewhere", http.StatusOK, "hit")
+}
+
 func (s *S) TestServeHTTPCache(c *check.C) {
 	var servers []*httptest.Server
 	for i := 0; i < 3; i++ {
