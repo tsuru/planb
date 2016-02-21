@@ -9,6 +9,8 @@ env:
     - GO15VENDOREXPERIMENT=1
   matrix:
     - GOARCH=amd64
+install:
+  - true
 script:
   - go test ./...
   - go build -ldflags "-linkmode external -extldflags -static"
