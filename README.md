@@ -45,7 +45,7 @@ The following flags are available for configuring PlanB on start-up:
 * Dynamic Configuration
 * WebSocket
 
-## 4. VHOST Configuration
+## VHOST Configuration
 
 The configuration is managed by **Redis** that makes possible
 to update the configuration dynamically and gracefully while
@@ -60,7 +60,7 @@ they serve the HTTP traffic on the port `80`.
 
 Follow these steps:
 
-1. Create the frontend:
+### Create the frontend:
 
 ```
 $ redis-cli rpush frontend:www.tsuru.io mywebsite
@@ -69,7 +69,7 @@ $ redis-cli rpush frontend:www.tsuru.io mywebsite
 
 The frontend identifer is `mywebsite`, it could be anything.
 
-2. Add the 2 backends:
+### Add the 2 backends:
 
 ```
 $ redis-cli rpush frontend:www.tsuru.io http://192.168.0.42:80
@@ -78,7 +78,7 @@ $ redis-cli rpush frontend:www.tsuru.io http://192.168.0.43:80
 (integer) 3
 ```
 
-3. Review the configuration:
+### Review the configuration:
 
 ```
 $ redis-cli lrange frontend:www.tsuru.io 0 -1
