@@ -219,30 +219,19 @@ func (s *S) TestServeHTTPRoundRobin(c *check.C) {
 	router := Router{}
 	err = router.Init()
 	c.Assert(err, check.IsNil)
-	request1, err := http.NewRequest("GET", "http://myfrontend.com/somewhere", nil)
-	c.Assert(err, check.IsNil)
-	request2, err := http.NewRequest("GET", "http://otherfrontend.com/somewhere", nil)
-	c.Assert(err, check.IsNil)
-	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, request1)
-	c.Assert(recorder.Code, check.Equals, http.StatusOK)
-	c.Assert(recorder.Body.String(), check.Equals, "server-0/somewhere")
-	recorder = httptest.NewRecorder()
-	router.ServeHTTP(recorder, request2)
-	c.Assert(recorder.Code, check.Equals, http.StatusOK)
-	c.Assert(recorder.Body.String(), check.Equals, "server-2/somewhere")
-	recorder = httptest.NewRecorder()
-	router.ServeHTTP(recorder, request1)
-	c.Assert(recorder.Code, check.Equals, http.StatusOK)
-	c.Assert(recorder.Body.String(), check.Equals, "server-1/somewhere")
-	recorder = httptest.NewRecorder()
-	router.ServeHTTP(recorder, request1)
-	c.Assert(recorder.Code, check.Equals, http.StatusOK)
-	c.Assert(recorder.Body.String(), check.Equals, "server-0/somewhere")
-	recorder = httptest.NewRecorder()
-	router.ServeHTTP(recorder, request2)
-	c.Assert(recorder.Code, check.Equals, http.StatusOK)
-	c.Assert(recorder.Body.String(), check.Equals, "server-3/somewhere")
+	checkReq := func(url, expected string) {
+		request, err := http.NewRequest("GET", url, nil)
+		c.Assert(err, check.IsNil)
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, request)
+		c.Assert(recorder.Code, check.Equals, http.StatusOK)
+		c.Assert(recorder.Body.String(), check.Equals, expected)
+	}
+	checkReq("http://myfrontend.com/somewhere", "server-0/somewhere")
+	checkReq("http://otherfrontend.com/somewhere", "server-2/somewhere")
+	checkReq("http://myfrontend.com/somewhere", "server-1/somewhere")
+	checkReq("http://myfrontend.com/somewhere", "server-0/somewhere")
+	checkReq("http://otherfrontend.com/somewhere", "server-3/somewhere")
 }
 
 func (s *S) TestServeHTTPCache(c *check.C) {
@@ -274,6 +263,8 @@ func (s *S) TestServeHTTPCache(c *check.C) {
 		dead:     nil,
 		expires:  time.Now().Add(time.Hour),
 	})
+	request, err = http.NewRequest("GET", "http://myfrontend.com/somewhere", nil)
+	c.Assert(err, check.IsNil)
 	recorder = httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
 	c.Assert(recorder.Code, check.Equals, http.StatusOK)
@@ -284,10 +275,14 @@ func (s *S) TestServeHTTPCache(c *check.C) {
 		dead:     nil,
 		expires:  time.Now().Add(-2*time.Second - 1),
 	})
+	request, err = http.NewRequest("GET", "http://myfrontend.com/somewhere", nil)
+	c.Assert(err, check.IsNil)
 	recorder = httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
 	c.Assert(recorder.Code, check.Equals, http.StatusOK)
 	c.Assert(recorder.Body.String(), check.Equals, "server-0/somewhere")
+	request, err = http.NewRequest("GET", "http://myfrontend.com/somewhere", nil)
+	c.Assert(err, check.IsNil)
 	recorder = httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
 	c.Assert(recorder.Code, check.Equals, http.StatusOK)
