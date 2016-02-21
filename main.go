@@ -158,7 +158,7 @@ func main() {
 			Name: "request-id-header",
 		},
 	}
-	app.Version = "0.1.4"
+	app.Version = "0.1.5"
 	app.Name = "planb"
 	app.Usage = "http and websockets reverse proxy"
 	app.Action = runServer
