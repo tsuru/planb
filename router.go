@@ -26,8 +26,7 @@ import (
 )
 
 var (
-	noRouteData       = []byte("no such route")
-	emptyBufferReader = ioutil.NopCloser(&bytes.Buffer{})
+	noRouteData = []byte("no such route")
 )
 
 type requestData struct {
@@ -342,7 +341,7 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 				ProtoMajor: req.ProtoMajor,
 				ProtoMinor: req.ProtoMinor,
 				Header:     http.Header{},
-				Body:       emptyBufferReader,
+				Body:       ioutil.NopCloser(&bytes.Buffer{}),
 			}
 		}
 	}

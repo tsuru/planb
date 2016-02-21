@@ -8,12 +8,14 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -164,6 +166,39 @@ func (s *S) TestRoundTripNoRoute(c *check.C) {
 	data, err := ioutil.ReadAll(rsp.Body)
 	c.Assert(err, check.IsNil)
 	c.Assert(data, check.DeepEquals, noRouteData)
+}
+
+func (s *S) TestServeHTTPStress(c *check.C) {
+	var logOutput bytes.Buffer
+	log.SetOutput(&logOutput)
+	defer log.SetOutput(nil)
+	router := Router{
+		DialTimeout: 1 * time.Second,
+	}
+	err := router.Init()
+	c.Assert(err, check.IsNil)
+	wg := sync.WaitGroup{}
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			url := fmt.Sprintf("a%d.com", i)
+			recorder := httptest.NewRecorder()
+			request, err := http.NewRequest("GET", "http://"+url, nil)
+			c.Assert(err, check.IsNil)
+			router.ServeHTTP(recorder, request)
+		}(i)
+	}
+	done := make(chan bool)
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Minute):
+		c.Fatal("timeout out after 1 minute")
+	}
 }
 
 func (s *S) TestServeHTTPRoundRobin(c *check.C) {
