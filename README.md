@@ -45,6 +45,50 @@ The following flags are available for configuring PlanB on start-up:
 * Dynamic Configuration
 * WebSocket
 
+## 4. VHOST Configuration
+
+The configuration is managed by **Redis** that makes possible
+to update the configuration dynamically and gracefully while
+the server is running, and have that state shared across workers
+and even across instances.
+
+Let's take an example to proxify requests to 2 backends for the hostname
+`www.tsuru.io`. The 2 backends IP are `192.168.0.42` and `192.168.0.43` and
+they serve the HTTP traffic on the port `80`.
+
+`redis-cli` is the standard client tool to talk to Redis from the terminal.
+
+Follow these steps:
+
+1. Create the frontend:
+
+```
+$ redis-cli rpush frontend:www.tsuru.io mywebsite
+(integer) 1
+```
+
+The frontend identifer is `mywebsite`, it could be anything.
+
+2. Add the 2 backends:
+
+```
+$ redis-cli rpush frontend:www.tsuru.io http://192.168.0.42:80
+(integer) 2
+$ redis-cli rpush frontend:www.tsuru.io http://192.168.0.43:80
+(integer) 3
+```
+
+3. Review the configuration:
+
+```
+$ redis-cli lrange frontend:www.tsuru.io 0 -1
+1) "mywebsite"
+2) "http://192.168.0.42:80"
+3) "http://192.168.0.43:80"
+```
+                                                                                While the server is running, any of these steps can be
+re-run without messing up with the traffic.
+
 ## Links
 
 * Repository & Issue Tracker: https://github.com/tsuru/planb
