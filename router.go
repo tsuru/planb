@@ -268,6 +268,10 @@ func (router *Router) Director(req *http.Request) {
 	}
 	req.URL.Scheme = url.Scheme
 	req.URL.Host = url.Host
+	if req.URL.Host == "" {
+		req.URL.Scheme = "http"
+		req.URL.Host = reqData.backend
+	}
 	if router.RequestIDHeader != "" && req.Header.Get(router.RequestIDHeader) == "" {
 		unparsedID, err := uuid.NewV4()
 		if err != nil {

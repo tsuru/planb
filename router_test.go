@@ -34,16 +34,21 @@ func Test(t *testing.T) {
 	check.TestingT(t)
 }
 
-func (s *S) SetUpTest(c *check.C) {
-	var err error
-	s.redis, err = redis.Dial("tcp", "127.0.0.1:6379")
-	c.Assert(err, check.IsNil)
-	keys, err := redis.Values(s.redis.Do("KEYS", "frontend:*"))
+func (s *S) clearKeys(pattern string, c *check.C) {
+	keys, err := redis.Values(s.redis.Do("KEYS", pattern))
 	c.Assert(err, check.IsNil)
 	for _, k := range keys {
 		_, err = s.redis.Do("DEL", k)
 		c.Assert(err, check.IsNil)
 	}
+}
+
+func (s *S) SetUpTest(c *check.C) {
+	var err error
+	s.redis, err = redis.Dial("tcp", "127.0.0.1:6379")
+	c.Assert(err, check.IsNil)
+	s.clearKeys("frontend:*", c)
+	s.clearKeys("dead:*", c)
 }
 
 func (s *S) TearDownTest(c *check.C) {
@@ -177,15 +182,17 @@ func (s *S) TestServeHTTPStress(c *check.C) {
 	c.Assert(err, check.IsNil)
 	wg := sync.WaitGroup{}
 	nConnections := 50
+	recorders := make([]*httptest.ResponseRecorder, nConnections)
 	for i := 0; i < nConnections; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			url := fmt.Sprintf("a%d.com", i)
+			url := fmt.Sprintf("http://a%d.com", i)
 			recorder := httptest.NewRecorder()
-			request, err := http.NewRequest("GET", "http://"+url, nil)
+			request, err := http.NewRequest("GET", url, nil)
 			c.Assert(err, check.IsNil)
 			router.ServeHTTP(recorder, request)
+			recorders[i] = recorder
 		}(i)
 	}
 	done := make(chan bool)
@@ -202,6 +209,57 @@ func (s *S) TestServeHTTPStress(c *check.C) {
 	c.Assert(logParts, check.HasLen, nConnections+1)
 	for _, part := range logParts[:nConnections] {
 		c.Assert(part, check.Matches, ".*no backends available$")
+	}
+	for _, recorder := range recorders {
+		c.Assert(recorder.Body.String(), check.Equals, "no such route")
+		c.Assert(recorder.Code, check.Equals, http.StatusBadRequest)
+	}
+}
+
+func (s *S) TestServeHTTPStressWithTimeoutBackend(c *check.C) {
+	_, err := s.redis.Do("RPUSH", "frontend:badfrontend.com", "badfrontend", "127.0.0.1:23771")
+	c.Assert(err, check.IsNil)
+	var logOutput bytes.Buffer
+	log.SetOutput(&logOutput)
+	defer log.SetOutput(nil)
+	router := Router{
+		DialTimeout: time.Second,
+	}
+	err = router.Init()
+	c.Assert(err, check.IsNil)
+	wg := sync.WaitGroup{}
+	nConnections := 50
+	recorders := make([]*httptest.ResponseRecorder, nConnections)
+	for i := 0; i < nConnections; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			url := fmt.Sprintf("http://badfrontend.com/%d", i)
+			recorder := httptest.NewRecorder()
+			request, err := http.NewRequest("GET", url, nil)
+			c.Assert(err, check.IsNil)
+			router.ServeHTTP(recorder, request)
+			recorders[i] = recorder
+		}(i)
+	}
+	done := make(chan bool)
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Minute):
+		c.Fatal("timeout out after 1 minute")
+	}
+	logParts := strings.Split(logOutput.String(), "\n")
+	c.Assert(logParts, check.HasLen, nConnections+1)
+	for _, part := range logParts[:nConnections] {
+		c.Assert(part, check.Matches, ".*error in backend request: dial tcp 127.0.0.1:23771.*")
+	}
+	for _, recorder := range recorders {
+		c.Assert(recorder.Body.String(), check.Equals, "")
+		c.Assert(recorder.Code, check.Equals, http.StatusServiceUnavailable)
 	}
 }
 
