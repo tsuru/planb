@@ -12,7 +12,7 @@ env:
 install:
   - true
 script:
-  - go test ./...
+  - go test -race ./...
   - go build -ldflags "-linkmode external -extldflags -static"
 after_success:
   - travis/docker_image.bash
