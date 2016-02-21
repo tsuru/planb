@@ -69,6 +69,7 @@ type Router struct {
 	rrMutex         sync.RWMutex
 	roundRobin      map[string]*uint64
 	cache           *lru.Cache
+	markingDisabled bool
 }
 
 func redisDialer(host string, port int) func() (redis.Conn, error) {
@@ -328,7 +329,7 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 				err = fmt.Errorf("%s *DEAD*", err)
 			}
 			logError(reqData.String(), req.URL.Path, err)
-			if markAsDead {
+			if markAsDead && !router.markingDisabled {
 				conn := router.writeRedisPool.Get()
 				defer conn.Close()
 				conn.Send("SADD", "dead:"+reqData.host, reqData.backendIdx)

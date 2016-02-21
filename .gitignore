@@ -1,2 +1,4 @@
 access.log
 planb
+*.pprof
+*.test

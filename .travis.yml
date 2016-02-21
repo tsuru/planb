@@ -13,6 +13,7 @@ install:
   - true
 script:
   - go test -race ./...
+  - ./check-leaks.sh
   - go build -ldflags "-linkmode external -extldflags -static"
 after_success:
   - travis/docker_image.bash
