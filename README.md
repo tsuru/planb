@@ -45,6 +45,18 @@ The following flags are available for configuring PlanB on start-up:
 * Dynamic Configuration
 * WebSocket
 
+## Install
+
+The easiest way to install PlanB is to pull the trusted build from the hub.docker.com and launch it in the container:
+
+```
+# run Redis
+docker run -d -p 6379:6379 --net=host redis
+
+# run PlanB
+docker run -d --net=host tsuru/planb:v1 --listen ":80"
+```
+
 ## VHOST Configuration
 
 The configuration is managed by **Redis** that makes possible
