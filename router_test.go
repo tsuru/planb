@@ -14,7 +14,6 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
-	"reflect"
 	"runtime"
 	"runtime/pprof"
 	"strconv"
@@ -82,9 +81,6 @@ func (s *S) TestInit(c *check.C) {
 	}
 	var canceler requestCanceler
 	c.Assert(&router, check.Implements, &canceler)
-	ptr1 := reflect.ValueOf(router.rp.Director).Pointer()
-	ptr2 := reflect.ValueOf(router.Director).Pointer()
-	c.Assert(ptr1, check.Equals, ptr2)
 	c.Assert(router.rp.Transport, check.Equals, &router)
 	c.Assert(router.readRedisPool, check.NotNil)
 	c.Assert(router.writeRedisPool, check.NotNil)
@@ -113,9 +109,7 @@ func (s *S) TestRoundTrip(c *check.C) {
 	c.Assert(err, check.IsNil)
 	request, err := http.NewRequest("GET", fmt.Sprintf("%s/", ts.URL), nil)
 	c.Assert(err, check.IsNil)
-	router.reqCtx[request] = &requestData{}
-	rsp, err := router.RoundTrip(request)
-	c.Assert(err, check.IsNil)
+	rsp := router.RoundTripWithData(request, &requestData{})
 	c.Assert(rsp.StatusCode, check.Equals, 200)
 	data, err := ioutil.ReadAll(rsp.Body)
 	c.Assert(err, check.IsNil)
@@ -137,14 +131,12 @@ func (s *S) TestRoundTripDebugHeaders(c *check.C) {
 	c.Assert(err, check.IsNil)
 	request, err := http.NewRequest("GET", fmt.Sprintf("%s/", ts.URL), nil)
 	c.Assert(err, check.IsNil)
-	router.reqCtx[request] = &requestData{
+	rsp := router.RoundTripWithData(request, &requestData{
 		debug:      true,
 		backend:    "backend",
 		backendIdx: 1,
 		host:       "a.b.c",
-	}
-	rsp, err := router.RoundTrip(request)
-	c.Assert(err, check.IsNil)
+	})
 	c.Assert(rsp.Header.Get("X-Debug-Backend-Url"), check.Equals, "backend")
 	c.Assert(rsp.Header.Get("X-Debug-Backend-Id"), check.Equals, "1")
 	c.Assert(rsp.Header.Get("X-Debug-Frontend-Key"), check.Equals, "a.b.c")
@@ -164,9 +156,7 @@ func (s *S) TestRoundTripDebugHeadersNoXDebug(c *check.C) {
 	c.Assert(err, check.IsNil)
 	request.Header.Set("X-Debug-A", "a")
 	request.Header.Set("X-Debug-B", "b")
-	router.reqCtx[request] = &requestData{}
-	rsp, err := router.RoundTrip(request)
-	c.Assert(err, check.IsNil)
+	rsp := router.RoundTripWithData(request, &requestData{})
 	c.Assert(rsp.Header.Get("X-Debug-A"), check.Equals, "")
 	c.Assert(rsp.Header.Get("X-Debug-B"), check.Equals, "")
 	c.Assert(sentReq.Header.Get("X-Debug-A"), check.Equals, "a")
@@ -181,13 +171,11 @@ func (s *S) TestRoundTripNoRoute(c *check.C) {
 	c.Assert(err, check.IsNil)
 	request, err := http.NewRequest("GET", "", nil)
 	c.Assert(err, check.IsNil)
-	router.reqCtx[request] = &requestData{}
-	rsp, err := router.RoundTrip(request)
-	c.Assert(err, check.IsNil)
+	rsp := router.RoundTripWithData(request, &requestData{})
 	c.Assert(rsp.StatusCode, check.Equals, http.StatusBadRequest)
 	data, err := ioutil.ReadAll(rsp.Body)
 	c.Assert(err, check.IsNil)
-	c.Assert(data, check.DeepEquals, noRouteData)
+	c.Assert(data, check.DeepEquals, noRouteResponseBody.value)
 }
 
 func (s *S) TestServeHTTPStress(c *check.C) {
@@ -458,7 +446,7 @@ func (s *S) TestServeHTTPWebSocket(c *check.C) {
 	c.Assert(string(msgBuf[:n]), check.Equals, "12345")
 }
 
-func (s *S) TestDirectorRequestIDHeaderNotNil(c *check.C) {
+func (s *S) TestChooseBackendRequestIDHeaderNotNil(c *check.C) {
 	msg := fmt.Sprintf("server-1")
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		rw.Write([]byte(msg + req.URL.Path))
@@ -473,11 +461,11 @@ func (s *S) TestDirectorRequestIDHeaderNotNil(c *check.C) {
 	c.Assert(err, check.IsNil)
 	request, err := http.NewRequest("GET", "http://myfrontend.com/somewhere", nil)
 	c.Assert(err, check.IsNil)
-	router.Director(request)
+	router.chooseBackend(request)
 	c.Assert(request.Header.Get(router.RequestIDHeader), check.NotNil)
 }
 
-func (s *S) TestDirectorRequestIDHeaderIsSetWhenItCamesEmpty(c *check.C) {
+func (s *S) TestChooseBackendRequestIDHeaderIsSetWhenItCamesEmpty(c *check.C) {
 	msg := fmt.Sprintf("server-1")
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		rw.Write([]byte(msg + req.URL.Path))
@@ -494,11 +482,11 @@ func (s *S) TestDirectorRequestIDHeaderIsSetWhenItCamesEmpty(c *check.C) {
 	c.Assert(err, check.IsNil)
 	id := ""
 	request.Header.Set(router.RequestIDHeader, id)
-	router.Director(request)
+	router.chooseBackend(request)
 	c.Assert(request.Header.Get(router.RequestIDHeader), check.Not(check.Equals), "")
 }
 
-func (s *S) TestDirectorRequestIDHeaderNotChangedWhenAlreadyExists(c *check.C) {
+func (s *S) TestChooseBackendRequestIDHeaderNotChangedWhenAlreadyExists(c *check.C) {
 	msg := fmt.Sprintf("server-1")
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		rw.Write([]byte(msg + req.URL.Path))
@@ -515,11 +503,11 @@ func (s *S) TestDirectorRequestIDHeaderNotChangedWhenAlreadyExists(c *check.C) {
 	c.Assert(err, check.IsNil)
 	id := "12345abcd"
 	request.Header.Set(router.RequestIDHeader, id)
-	router.Director(request)
+	router.chooseBackend(request)
 	c.Assert(request.Header.Get(router.RequestIDHeader), check.Equals, "12345abcd")
 }
 
-func (s *S) TestDirectorRequestIDHeaderDoesNothingIfFlagIsNotSet(c *check.C) {
+func (s *S) TestChooseBackendRequestIDHeaderDoesNothingIfFlagIsNotSet(c *check.C) {
 	msg := fmt.Sprintf("server-1")
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		rw.Write([]byte(msg + req.URL.Path))
@@ -532,7 +520,7 @@ func (s *S) TestDirectorRequestIDHeaderDoesNothingIfFlagIsNotSet(c *check.C) {
 	c.Assert(err, check.IsNil)
 	request, err := http.NewRequest("GET", "http://myfrontend.com/somewhere", nil)
 	c.Assert(err, check.IsNil)
-	router.Director(request)
+	router.chooseBackend(request)
 	c.Assert(router.RequestIDHeader, check.Equals, "")
 	c.Assert(request.Header.Get(router.RequestIDHeader), check.Equals, "")
 }

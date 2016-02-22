@@ -5,11 +5,9 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -25,8 +23,21 @@ import (
 	"github.com/nu7hatch/gouuid"
 )
 
+type FixedReadCloser struct {
+	value []byte
+}
+
+func (r *FixedReadCloser) Read(p []byte) (n int, err error) {
+	return copy(p, r.value), io.EOF
+}
+
+func (r *FixedReadCloser) Close() error {
+	return nil
+}
+
 var (
-	noRouteData = []byte("no such route")
+	emptyResponseBody   = &FixedReadCloser{}
+	noRouteResponseBody = &FixedReadCloser{value: []byte("no such route")}
 )
 
 type requestData struct {
@@ -47,6 +58,22 @@ func (r *requestData) String() string {
 	return r.host + " -> " + back
 }
 
+type bufferPool struct {
+	syncPool sync.Pool
+}
+
+func (p *bufferPool) Get() []byte {
+	b := p.syncPool.Get()
+	if b == nil {
+		return make([]byte, 32*1024)
+	}
+	return b.([]byte)
+}
+
+func (p *bufferPool) Put(b []byte) {
+	p.syncPool.Put(b)
+}
+
 type Router struct {
 	http.Transport
 	ReadRedisHost   string
@@ -65,7 +92,6 @@ type Router struct {
 	writeRedisPool  *redis.Pool
 	logger          *Logger
 	ctxMutex        sync.Mutex
-	reqCtx          map[*http.Request]*requestData
 	rrMutex         sync.RWMutex
 	roundRobin      map[string]*uint64
 	cache           *lru.Cache
@@ -118,7 +144,6 @@ func (router *Router) Init() error {
 			return err
 		}
 	}
-	router.reqCtx = make(map[*http.Request]*requestData)
 	router.dialer = &net.Dialer{
 		Timeout:   router.DialTimeout,
 		KeepAlive: 30 * time.Second,
@@ -130,9 +155,10 @@ func (router *Router) Init() error {
 	}
 	router.roundRobin = make(map[string]*uint64)
 	router.rp = &httputil.ReverseProxy{
-		Director:      router.Director,
+		Director:      func(*http.Request) {},
 		Transport:     router,
 		FlushInterval: router.FlushInterval,
+		BufferPool:    &bufferPool{},
 	}
 	return nil
 }
@@ -205,11 +231,6 @@ func (router *Router) getRequestData(req *http.Request, save bool) (*requestData
 		host:      host,
 	}
 	req.Header.Del("X-Debug-Router")
-	if save {
-		router.ctxMutex.Lock()
-		router.reqCtx[req] = reqData
-		router.ctxMutex.Unlock()
-	}
 	set, err := router.getBackends(host)
 	if err != nil {
 		return reqData, err
@@ -253,18 +274,18 @@ func (router *Router) getRequestData(req *http.Request, save bool) (*requestData
 	return reqData, nil
 }
 
-func (router *Router) Director(req *http.Request) {
+func (router *Router) chooseBackend(req *http.Request) *requestData {
 	req.URL.Scheme = ""
 	req.URL.Host = ""
 	reqData, err := router.getRequestData(req, true)
 	if err != nil {
 		logError(reqData.String(), req.URL.Path, err)
-		return
+		return reqData
 	}
 	url, err := url.Parse(reqData.backend)
 	if err != nil {
 		logError(reqData.String(), req.URL.Path, fmt.Errorf("invalid backend url: %s", err))
-		return
+		return reqData
 	}
 	req.URL.Scheme = url.Scheme
 	req.URL.Host = url.Host
@@ -276,40 +297,42 @@ func (router *Router) Director(req *http.Request) {
 		unparsedID, err := uuid.NewV4()
 		if err != nil {
 			logError(reqData.String(), req.URL.Path, fmt.Errorf("unable to generate request id: %s", err))
-			return
+			return reqData
 		}
 		uniqueID := unparsedID.String()
 		req.Header.Set(router.RequestIDHeader, uniqueID)
 	}
+	return reqData
 }
 
 func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
-	router.ctxMutex.Lock()
-	reqData := router.reqCtx[req]
-	delete(router.reqCtx, req)
-	router.ctxMutex.Unlock()
+	reqData := router.chooseBackend(req)
+	rsp := router.RoundTripWithData(req, reqData)
+	return rsp, nil
+}
+
+func (router *Router) RoundTripWithData(req *http.Request, reqData *requestData) *http.Response {
 	var rsp *http.Response
 	var err error
 	var backendDuration time.Duration
-	var timedout int32
-	if router.RequestTimeout > 0 {
-		timer := time.AfterFunc(router.RequestTimeout, func() {
-			router.Transport.CancelRequest(req)
-			atomic.AddInt32(&timedout, 1)
-		})
-		defer timer.Stop()
-	}
 	if req.URL.Scheme == "" || req.URL.Host == "" {
-		closerBuffer := ioutil.NopCloser(bytes.NewBuffer(noRouteData))
 		rsp = &http.Response{
 			Request:       req,
 			StatusCode:    http.StatusBadRequest,
 			ProtoMajor:    req.ProtoMajor,
 			ProtoMinor:    req.ProtoMinor,
-			ContentLength: int64(len(noRouteData)),
-			Body:          closerBuffer,
+			ContentLength: int64(len(noRouteResponseBody.value)),
+			Body:          noRouteResponseBody,
 		}
 	} else {
+		var timedout int32
+		if router.RequestTimeout > 0 {
+			timer := time.AfterFunc(router.RequestTimeout, func() {
+				atomic.AddInt32(&timedout, 1)
+				router.Transport.CancelRequest(req)
+			})
+			defer timer.Stop()
+		}
 		t0 := time.Now().UTC()
 		rsp, err = router.Transport.RoundTrip(req)
 		backendDuration = time.Since(t0)
@@ -346,7 +369,7 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 				ProtoMajor: req.ProtoMajor,
 				ProtoMinor: req.ProtoMinor,
 				Header:     http.Header{},
-				Body:       ioutil.NopCloser(&bytes.Buffer{}),
+				Body:       emptyResponseBody,
 			}
 		}
 	}
@@ -363,7 +386,7 @@ func (router *Router) RoundTrip(req *http.Request) (*http.Response, error) {
 		totalDuration:   time.Since(reqData.startTime),
 		backendKey:      reqData.backendKey,
 	})
-	return rsp, nil
+	return rsp
 }
 
 func (router *Router) serveWebsocket(rw http.ResponseWriter, req *http.Request) (*requestData, error) {
