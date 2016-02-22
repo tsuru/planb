@@ -10,6 +10,7 @@ env:
     - GOARCH=amd64
 install:
   - true
+  - sudo docker version
 script:
   - go test -race ./...
   - ./check-leaks.sh
