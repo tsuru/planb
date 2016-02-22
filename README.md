@@ -37,6 +37,8 @@ The following flags are available for configuring PlanB on start-up:
   a network failure. Default value is ``30``.
 - ``--flush-interval``: Time in milliseconds to flush the proxied request.
   Default value is ``10``.
+- ``--request-id-header``: Enables PlanB to set a header with an unique ID to
+  the requests, facilitating the process of tracing requests.
 
 ## Features
 
@@ -106,3 +108,4 @@ re-run without messing up with the traffic.
 
 * Repository & Issue Tracker: https://github.com/tsuru/planb
 * Talk to us on Gitter: https://gitter.im/tsuru/tsuru
+=======
