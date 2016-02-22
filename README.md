@@ -5,7 +5,7 @@
 ## What Is It?
 
 PlanB is a HTTP and websocket proxy backed by Redis and inspired by
-[Hipache](https://github.com/dotcloud/hipache).
+[Hipache](https://github.com/hipache/hipache).
 
 It aims to be fully compatible with Hipache when Redis is used as a backend.
 The same format is used for all keys stored in Redis so migrating from Hipache
