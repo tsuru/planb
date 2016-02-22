@@ -91,7 +91,6 @@ type Router struct {
 	readRedisPool   *redis.Pool
 	writeRedisPool  *redis.Pool
 	logger          *Logger
-	ctxMutex        sync.Mutex
 	rrMutex         sync.RWMutex
 	roundRobin      map[string]*uint64
 	cache           *lru.Cache
