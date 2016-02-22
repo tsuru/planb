@@ -128,7 +128,7 @@ func (router *Router) Init() error {
 		IdleTimeout: 1 * time.Minute,
 		Dial:        redisDialer(router.WriteRedisHost, router.WriteRedisPort),
 	}
-	if router.logger == nil {
+	if router.logger == nil && router.LogPath != "none" {
 		router.logger, err = NewFileLogger(router.LogPath)
 		if err != nil {
 			return err
@@ -163,7 +163,9 @@ func (router *Router) Init() error {
 }
 
 func (router *Router) Stop() {
-	router.logger.Stop()
+	if router.logger != nil {
+		router.logger.Stop()
+	}
 }
 
 type backendSet struct {
@@ -377,15 +379,16 @@ func (router *Router) RoundTripWithData(req *http.Request, reqData *requestData)
 		rsp.Header.Set("X-Debug-Backend-Id", strconv.FormatUint(uint64(reqData.backendIdx), 10))
 		rsp.Header.Set("X-Debug-Frontend-Key", reqData.host)
 	}
-	router.logger.MessageRaw(&logEntry{
-		now:             time.Now(),
-		req:             req,
-		rsp:             rsp,
-		requestIDHeader: router.RequestIDHeader,
-		backendDuration: backendDuration,
-		totalDuration:   time.Since(reqData.startTime),
-		backendKey:      reqData.backendKey,
-	})
+	if router.logger != nil {
+		router.logger.MessageRaw(&logEntry{
+			now:             time.Now(),
+			req:             req,
+			rsp:             rsp,
+			backendDuration: backendDuration,
+			totalDuration:   time.Since(reqData.startTime),
+			backendKey:      reqData.backendKey,
+		})
+	}
 	return rsp
 }
 

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"regexp"
 	"runtime/pprof"
 	"strings"
 	"syscall"
@@ -80,6 +81,8 @@ func runServer(c *cli.Context) {
 }
 
 func fixUsage(s string) string {
+	linebreakRegexp := regexp.MustCompile(`\n{1}[\t ]*`)
+	s = linebreakRegexp.ReplaceAllString(s, " ")
 	parts := strings.Split(s, " ")
 	currLen := 0
 	lastPart := 0
@@ -123,7 +126,9 @@ func main() {
 		cli.StringFlag{
 			Name:  "access-log",
 			Value: "./access.log",
-			Usage: fixUsage("File path where access log will be written. If value equals `syslog` log will be sent to local syslog"),
+			Usage: fixUsage(`File path where access log will be written.
+If value equals 'syslog' log will be sent to local syslog.
+The value 'none' can be used to disable access logs.`),
 		},
 		cli.IntFlag{
 			Name:  "request-timeout",

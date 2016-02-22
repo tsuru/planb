@@ -446,6 +446,25 @@ func (s *S) TestServeHTTPWebSocket(c *check.C) {
 	c.Assert(string(msgBuf[:n]), check.Equals, "12345")
 }
 
+func (s *S) TestServeHTTPNoLogger(c *check.C) {
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		rw.Write([]byte("hit"))
+	}))
+	defer srv.Close()
+	_, err := s.redis.Do("RPUSH", "frontend:goodfrontend.com", "goodfrontend", srv.URL)
+	c.Assert(err, check.IsNil)
+	router := Router{}
+	err = router.Init()
+	c.Assert(err, check.IsNil)
+	router.logger = nil
+	request, err := http.NewRequest("GET", "http://goodfrontend.com/", nil)
+	c.Assert(err, check.IsNil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	c.Assert(recorder.Code, check.Equals, http.StatusOK)
+	c.Assert(recorder.Body.String(), check.Equals, "hit")
+}
+
 func (s *S) TestChooseBackendRequestIDHeaderNotNil(c *check.C) {
 	msg := fmt.Sprintf("server-1")
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
@@ -616,6 +635,31 @@ func BenchmarkServeHTTP(b *testing.B) {
 	defer clearKeys(r)
 	r.Do("RPUSH", "frontend:benchfrontend.com", "benchfrontend", srv.URL)
 	router := Router{}
+	router.Init()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			request, _ := http.NewRequest("GET", "http://benchfrontend.com/", nil)
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusOK {
+				b.Fatalf("invalid status code %d, expected 200", recorder.Code)
+			}
+		}
+	})
+}
+
+func BenchmarkServeHTTPNoAccessLog(b *testing.B) {
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		rw.Write([]byte("hit"))
+	}))
+	defer srv.Close()
+	r, _ := redisConn()
+	defer clearKeys(r)
+	r.Do("RPUSH", "frontend:benchfrontend.com", "benchfrontend", srv.URL)
+	router := Router{
+		LogPath: "none",
+	}
 	router.Init()
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
