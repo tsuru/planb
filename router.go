@@ -381,6 +381,7 @@ func (router *Router) RoundTripWithData(req *http.Request, reqData *requestData)
 		now:             time.Now(),
 		req:             req,
 		rsp:             rsp,
+		requestIDHeader: router.RequestIDHeader,
 		backendDuration: backendDuration,
 		totalDuration:   time.Since(reqData.startTime),
 		backendKey:      reqData.backendKey,

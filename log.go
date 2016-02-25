@@ -32,6 +32,7 @@ type logEntry struct {
 	req             *http.Request
 	rsp             *http.Response
 	backendDuration time.Duration
+	requestIDHeader string
 	totalDuration   time.Duration
 	backendKey      string
 }
@@ -98,7 +99,7 @@ func (l *Logger) logWriter() {
 			ip = "::ffff:" + ip
 		}
 		fmt.Fprintf(l.writer,
-			"%s - - [%s] \"%s %s %s\" %d %d \"%s\" \"%s\" \"%s\" %0.3f %0.3f\n",
+			"%s - - [%s] \"%s %s %s\" %d %d \"%s\" \"%s\" \"%s:%s\" \"%s\" %0.3f %0.3f\n",
 			ip,
 			nowFormatted,
 			el.req.Method,
@@ -108,6 +109,8 @@ func (l *Logger) logWriter() {
 			el.rsp.ContentLength,
 			el.req.Referer(),
 			el.req.UserAgent(),
+			el.requestIDHeader,
+			el.req.Header.Get(el.requestIDHeader),
 			el.backendKey,
 			float64(el.totalDuration)/float64(time.Second),
 			float64(el.backendDuration)/float64(time.Second),
