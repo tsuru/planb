@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime"
 	"runtime/pprof"
 	"strings"
 	"syscall"
@@ -28,15 +27,7 @@ func handleSignals(server *manners.GracefulServer) {
 				server.Close()
 			}
 			if sig == syscall.SIGUSR1 {
-				var buf []byte
-				var written int
-				currLen := 1024
-				for written == len(buf) {
-					buf = make([]byte, currLen)
-					written = runtime.Stack(buf, true)
-					currLen *= 2
-				}
-				log.Print(string(buf[:written]))
+				pprof.Lookup("goroutine").WriteTo(os.Stdout, 2)
 			}
 			if sig == syscall.SIGUSR2 {
 				go func() {
@@ -132,7 +123,7 @@ func main() {
 		cli.StringFlag{
 			Name:  "access-log",
 			Value: "./access.log",
-			Usage: fixUsage("File path where access log will be written. If value equals `syslog` log will be sent to local syslog."),
+			Usage: fixUsage("File path where access log will be written. If value equals `syslog` log will be sent to local syslog"),
 		},
 		cli.IntFlag{
 			Name:  "request-timeout",
@@ -147,15 +138,16 @@ func main() {
 		cli.IntFlag{
 			Name:  "dead-backend-time",
 			Value: 30,
-			Usage: fixUsage("Time in seconds a backend will remain disabled after a network failure."),
+			Usage: fixUsage("Time in seconds a backend will remain disabled after a network failure"),
 		},
 		cli.IntFlag{
 			Name:  "flush-interval",
 			Value: 10,
-			Usage: fixUsage("Time in milliseconds to flush the proxied request."),
+			Usage: fixUsage("Time in milliseconds to flush the proxied request"),
 		},
 		cli.StringFlag{
-			Name: "request-id-header",
+			Name:  "request-id-header",
+			Usage: "Header to enable message tracking",
 		},
 	}
 	app.Version = "0.1.6"
