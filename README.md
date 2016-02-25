@@ -104,6 +104,17 @@ $ redis-cli lrange frontend:www.tsuru.io 0 -1
 While the server is running, any of these steps can be
 re-run without messing up with the traffic.
 
+## Debbugging and Troubleshooting
+
+One way to debug/toubleshoot planb is by analyzing the running goroutines.
+
+Planb is able to handle the USR1 signal to dump goroutines in its execution
+screen:
+
+```
+$ kill -s USR1 <planb-PID>
+```
+
 ## Links
 
 * Repository & Issue Tracker: https://github.com/tsuru/planb
