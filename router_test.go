@@ -626,6 +626,60 @@ func (s *S) TestServeHTTPStressAllLeakDetector(c *check.C) {
 	}
 }
 
+func (s *S) TestServeHTTPHostDestination(c *check.C) {
+	var reqData *http.Request
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		reqData = req
+		rw.Write([]byte("hit"))
+	}))
+	defer srv.Close()
+	u, err := url.Parse(srv.URL)
+	c.Assert(err, check.IsNil)
+	_, port, _ := net.SplitHostPort(u.Host)
+	c.Assert(port, check.Not(check.Equals), "")
+	_, err = s.redis.Do("RPUSH", "frontend:goodfrontend.com", "goodfrontend", fmt.Sprintf("http://localhost:%s", port))
+	c.Assert(err, check.IsNil)
+	router := Router{}
+	err = router.Init()
+	c.Assert(err, check.IsNil)
+	router.logger = nil
+	request, err := http.NewRequest("GET", "http://goodfrontend.com/", nil)
+	c.Assert(err, check.IsNil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	c.Assert(recorder.Code, check.Equals, http.StatusOK)
+	c.Assert(recorder.Body.String(), check.Equals, "hit")
+	c.Assert(reqData.Host, check.Equals, "localhost")
+	c.Assert(reqData.Header.Get("X-Host"), check.Equals, "goodfrontend.com")
+}
+
+func (s *S) TestServeHTTPIPDestination(c *check.C) {
+	var reqData *http.Request
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		reqData = req
+		rw.Write([]byte("hit"))
+	}))
+	defer srv.Close()
+	u, err := url.Parse(srv.URL)
+	c.Assert(err, check.IsNil)
+	_, port, _ := net.SplitHostPort(u.Host)
+	c.Assert(port, check.Not(check.Equals), "")
+	_, err = s.redis.Do("RPUSH", "frontend:goodfrontend.com", "goodfrontend", fmt.Sprintf("http://127.0.0.1:%s", port))
+	c.Assert(err, check.IsNil)
+	router := Router{}
+	err = router.Init()
+	c.Assert(err, check.IsNil)
+	router.logger = nil
+	request, err := http.NewRequest("GET", "http://goodfrontend.com/", nil)
+	c.Assert(err, check.IsNil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	c.Assert(recorder.Code, check.Equals, http.StatusOK)
+	c.Assert(recorder.Body.String(), check.Equals, "hit")
+	c.Assert(reqData.Host, check.Equals, "goodfrontend.com")
+	c.Assert(reqData.Header.Get("X-Host"), check.Equals, "")
+}
+
 func BenchmarkServeHTTP(b *testing.B) {
 	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		rw.Write([]byte("hit"))

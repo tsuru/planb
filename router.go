@@ -334,6 +334,15 @@ func (router *Router) RoundTripWithData(req *http.Request, reqData *requestData)
 			})
 			defer timer.Stop()
 		}
+		host, _, _ := net.SplitHostPort(req.URL.Host)
+		if host == "" {
+			host = req.URL.Host
+		}
+		isIP := net.ParseIP(host) != nil
+		if !isIP {
+			req.Header.Set("X-Host", req.Host)
+			req.Host = host
+		}
 		t0 := time.Now().UTC()
 		rsp, err = router.Transport.RoundTrip(req)
 		backendDuration = time.Since(t0)
