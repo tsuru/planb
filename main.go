@@ -155,7 +155,7 @@ The value 'none' can be used to disable access logs.`),
 			Usage: "Header to enable message tracking",
 		},
 	}
-	app.Version = "0.1.6"
+	app.Version = "0.1.7"
 	app.Name = "planb"
 	app.Usage = "http and websockets reverse proxy"
 	app.Action = runServer
