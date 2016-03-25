@@ -40,6 +40,8 @@ type logEntry struct {
 func NewFileLogger(path string) (*Logger, error) {
 	if path == "syslog" {
 		return NewSyslogLogger()
+	} else if path == "stdout" {
+		return NewStdoutLogger()
 	}
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0660)
 	if err != nil {
@@ -54,6 +56,10 @@ func NewSyslogLogger() (*Logger, error) {
 		return nil, err
 	}
 	return NewWriterLogger(writer), nil
+}
+
+func NewStdoutLogger() (*Logger, error) {
+	return NewWriterLogger(os.Stdout), nil
 }
 
 func NewWriterLogger(writer io.WriteCloser) *Logger {
