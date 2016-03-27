@@ -1,4 +1,5 @@
-access.log
+*access.log
 planb
 *.pprof
 *.test
+stdout

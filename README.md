@@ -27,8 +27,8 @@ The following flags are available for configuring PlanB on start-up:
 - ``--write-redis-port``: Redis port of the server which which PlanB will use
   for publishing dead backends. Default value is ``6379``.
 - ``--access-log``: File path where access log will be written. If value equals
-  ``syslog`` log will be sent to local syslog. Default value is
-  ``./access.log``.
+  ``syslog`` log will be sent to local syslog. If value equals ``stdout`` log will
+  be sent to stdout. Default value is ``./access.log``.
 - ``--request-timeout``: Total backend request timeout in seconds. Default
   value is ``30``.
 - ``--dial-timeout``: Dial backend request timeout in seconds. Default value is
