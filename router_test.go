@@ -75,17 +75,16 @@ func (s *S) TestInit(c *check.C) {
 	router := Router{}
 	err := router.Init()
 	c.Assert(err, check.IsNil)
-	c.Assert(router.roundRobin, check.DeepEquals, map[string]*uint64{})
+	c.Assert(router.roundRobin, check.DeepEquals, map[string]*int32{})
 	type requestCanceler interface {
 		CancelRequest(*http.Request)
 	}
 	var canceler requestCanceler
 	c.Assert(&router, check.Implements, &canceler)
 	c.Assert(router.rp.Transport, check.Equals, &router)
-	c.Assert(router.readRedisPool, check.NotNil)
-	c.Assert(router.writeRedisPool, check.NotNil)
 	c.Assert(router.logger, check.NotNil)
 	c.Assert(router.cache, check.NotNil)
+	c.Assert(router.backend, check.NotNil)
 }
 
 type BufferCloser struct {

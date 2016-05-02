@@ -18,9 +18,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/garyburd/redigo/redis"
 	"github.com/hashicorp/golang-lru"
 	"github.com/nu7hatch/gouuid"
+	"github.com/tsuru/planb/backend"
 )
 
 type FixedReadCloser struct {
@@ -88,45 +88,25 @@ type Router struct {
 	RequestIDHeader string
 	rp              *httputil.ReverseProxy
 	dialer          *net.Dialer
-	readRedisPool   *redis.Pool
-	writeRedisPool  *redis.Pool
+	backend         backend.RoutesBackend
 	logger          *Logger
 	rrMutex         sync.RWMutex
-	roundRobin      map[string]*uint64
+	roundRobin      map[string]*int32
 	cache           *lru.Cache
 	markingDisabled bool
 }
 
-func redisDialer(host string, port int) func() (redis.Conn, error) {
-	readTimeout := time.Second
-	writeTimeout := time.Second
-	dialTimeout := time.Second
-	if host == "" {
-		host = "127.0.0.1"
-	}
-	if port == 0 {
-		port = 6379
-	}
-	redisAddr := fmt.Sprintf("%s:%d", host, port)
-	return func() (redis.Conn, error) {
-		return redis.DialTimeout("tcp", redisAddr, dialTimeout, readTimeout, writeTimeout)
-	}
-}
-
 func (router *Router) Init() error {
 	var err error
+	if router.backend == nil {
+		be, err := backend.NewRedisBackend(backend.RedisOptions{}, backend.RedisOptions{})
+		if err != nil {
+			return err
+		}
+		router.backend = be
+	}
 	if router.LogPath == "" {
 		router.LogPath = "./access.log"
-	}
-	router.readRedisPool = &redis.Pool{
-		MaxIdle:     100,
-		IdleTimeout: 1 * time.Minute,
-		Dial:        redisDialer(router.ReadRedisHost, router.ReadRedisPort),
-	}
-	router.writeRedisPool = &redis.Pool{
-		MaxIdle:     100,
-		IdleTimeout: 1 * time.Minute,
-		Dial:        redisDialer(router.WriteRedisHost, router.WriteRedisPort),
 	}
 	if router.logger == nil && router.LogPath != "none" {
 		router.logger, err = NewFileLogger(router.LogPath)
@@ -152,7 +132,7 @@ func (router *Router) Init() error {
 		TLSHandshakeTimeout: router.DialTimeout,
 		MaxIdleConnsPerHost: 100,
 	}
-	router.roundRobin = make(map[string]*uint64)
+	router.roundRobin = make(map[string]*int32)
 	router.rp = &httputil.ReverseProxy{
 		Director:      func(*http.Request) {},
 		Transport:     router,
@@ -171,7 +151,7 @@ func (router *Router) Stop() {
 type backendSet struct {
 	id       string
 	backends []string
-	dead     map[uint64]struct{}
+	dead     map[int]struct{}
 	expires  time.Time
 }
 
@@ -187,35 +167,11 @@ func (router *Router) getBackends(host string) (*backendSet, error) {
 		}
 	}
 	var set backendSet
-	conn := router.readRedisPool.Get()
-	defer conn.Close()
-	conn.Send("LRANGE", "frontend:"+host, 0, -1)
-	conn.Send("SMEMBERS", "dead:"+host)
-	data, err := conn.Do("")
+	var err error
+	set.id, set.backends, set.dead, err = router.backend.Backends(host)
 	if err != nil {
-		return nil, fmt.Errorf("error running redis commands: %s", err)
+		return nil, fmt.Errorf("error running routes backend commands: %s", err)
 	}
-	responses := data.([]interface{})
-	if len(responses) != 2 {
-		return nil, fmt.Errorf("unexpected redis response: %#v", responses)
-	}
-	backends := responses[0].([]interface{})
-	if len(backends) < 2 {
-		return nil, errors.New("no backends available")
-	}
-	set.id = string(backends[0].([]byte))
-	backends = backends[1:]
-	set.backends = make([]string, len(backends))
-	for i, backend := range backends {
-		set.backends[i] = string(backend.([]byte))
-	}
-	deadMembers := responses[1].([]interface{})
-	deadMap := map[uint64]struct{}{}
-	for _, dead := range deadMembers {
-		deadIdx, _ := strconv.ParseUint(string(dead.([]byte)), 10, 64)
-		deadMap[deadIdx] = struct{}{}
-	}
-	set.dead = deadMap
 	set.expires = time.Now().Add(2 * time.Second)
 	router.cache.Add(host, set)
 	return &set, nil
@@ -245,7 +201,7 @@ func (router *Router) getRequestData(req *http.Request, save bool) (*requestData
 		router.rrMutex.Lock()
 		roundRobin = router.roundRobin[host]
 		if roundRobin == nil {
-			roundRobin = new(uint64)
+			roundRobin = new(int32)
 			router.roundRobin[host] = roundRobin
 		}
 		router.rrMutex.Unlock()
@@ -253,16 +209,16 @@ func (router *Router) getRequestData(req *http.Request, save bool) (*requestData
 		router.rrMutex.RUnlock()
 	}
 	// We always add, it will eventually overflow to zero which is fine.
-	initialNumber := atomic.AddUint64(roundRobin, 1)
-	initialNumber = (initialNumber - 1) % uint64(reqData.backendLen)
+	initialNumber := atomic.AddInt32(roundRobin, 1)
+	initialNumber = (initialNumber - 1) % int32(reqData.backendLen)
 	toUseNumber := -1
 	for chosenNumber := initialNumber; ; {
-		_, isDead := set.dead[chosenNumber]
+		_, isDead := set.dead[int(chosenNumber)]
 		if !isDead {
 			toUseNumber = int(chosenNumber)
 			break
 		}
-		chosenNumber = (chosenNumber + 1) % uint64(reqData.backendLen)
+		chosenNumber = (chosenNumber + 1) % int32(reqData.backendLen)
 		if chosenNumber == initialNumber {
 			break
 		}
@@ -363,14 +319,9 @@ func (router *Router) RoundTripWithData(req *http.Request, reqData *requestData)
 			}
 			logError(reqData.String(), req.URL.Path, err)
 			if markAsDead && !router.markingDisabled {
-				conn := router.writeRedisPool.Get()
-				defer conn.Close()
-				conn.Send("SADD", "dead:"+reqData.host, reqData.backendIdx)
-				conn.Send("EXPIRE", "dead:"+reqData.host, router.DeadBackendTTL)
-				conn.Send("PUBLISH", "dead", fmt.Sprintf("%s;%s;%d;%d", reqData.host, reqData.backend, reqData.backendIdx, reqData.backendLen))
-				_, redisErr := conn.Do("")
-				if redisErr != nil {
-					logError(reqData.String(), req.URL.Path, fmt.Errorf("error markind dead backend in redis: %s", redisErr))
+				markErr := router.backend.MarkDead(reqData.host, reqData.backend, reqData.backendIdx, reqData.backendLen, router.DeadBackendTTL)
+				if markErr != nil {
+					logError(reqData.String(), req.URL.Path, fmt.Errorf("error markind dead backend in routes backend: %s", markErr))
 				}
 			}
 			rsp = &http.Response{

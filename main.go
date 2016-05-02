@@ -5,6 +5,7 @@
 package main
 
 import (
+	"github.com/tsuru/planb/backend"
 	"log"
 	"net"
 	"net/http"
@@ -54,11 +55,28 @@ func runServer(c *cli.Context) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	readOpts := backend.RedisOptions{
+		Host:          c.String("read-redis-host"),
+		Port:          c.Int("read-redis-port"),
+		SentinelAddrs: c.String("read-redis-sentinel-addrs"),
+		SentinelName:  c.String("read-redis-sentinel-name"),
+		Password:      c.String("read-redis-password"),
+		DB:            c.Int("read-redis-db"),
+	}
+	writeOpts := backend.RedisOptions{
+		Host:          c.String("write-redis-host"),
+		Port:          c.Int("write-redis-port"),
+		SentinelAddrs: c.String("write-redis-sentinel-addrs"),
+		SentinelName:  c.String("write-redis-sentinel-name"),
+		Password:      c.String("write-redis-password"),
+		DB:            c.Int("write-redis-db"),
+	}
+	routesBE, err := backend.NewRedisBackend(readOpts, writeOpts)
+	if err != nil {
+		log.Fatal(err)
+	}
 	router := Router{
-		ReadRedisHost:   c.String("read-redis-host"),
-		ReadRedisPort:   c.Int("read-redis-port"),
-		WriteRedisHost:  c.String("write-redis-host"),
-		WriteRedisPort:  c.Int("write-redis-port"),
+		backend:         routesBE,
 		LogPath:         c.String("access-log"),
 		RequestTimeout:  time.Duration(c.Int("request-timeout")) * time.Second,
 		DialTimeout:     time.Duration(c.Int("dial-timeout")) * time.Second,
@@ -116,12 +134,38 @@ func main() {
 			Value: 6379,
 		},
 		cli.StringFlag{
+			Name:  "read-redis-sentinel-addrs",
+			Usage: "Comma separated list of redis addresses",
+		},
+		cli.StringFlag{
+			Name: "read-redis-sentinel-name",
+		},
+		cli.StringFlag{
+			Name: "read-redis-password",
+		},
+		cli.IntFlag{
+			Name: "read-redis-db",
+		},
+		cli.StringFlag{
 			Name:  "write-redis-host",
 			Value: "127.0.0.1",
 		},
 		cli.IntFlag{
 			Name:  "write-redis-port",
 			Value: 6379,
+		},
+		cli.StringFlag{
+			Name:  "write-redis-sentinel-addrs",
+			Usage: "Comma separated list of redis addresses",
+		},
+		cli.StringFlag{
+			Name: "write-redis-sentinel-name",
+		},
+		cli.StringFlag{
+			Name: "write-redis-password",
+		},
+		cli.IntFlag{
+			Name: "write-redis-db",
 		},
 		cli.StringFlag{
 			Name:  "access-log",
