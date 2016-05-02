@@ -46,6 +46,37 @@
 			"path": "gopkg.in/check.v1",
 			"revision": "64131543e7896d5bcc6bd5a76287eb75ea96c673",
 			"revisionTime": "2014-10-24T11:38:53-02:00"
+		},
+		{
+			"checksumSHA1": "m3qkRWmZBzqd+Pnd+XsI7gxGOqU=",
+			"path": "gopkg.in/redis.v3",
+			"revision": "5183f8dcde9737db7583dbfa9881800dba26e3fa",
+			"revisionTime": "2016-05-02T11:39:45Z"
+		},
+		{
+			"checksumSHA1": "b4Z72l8sq4xuWhR+nM5vbLQIv+o=",
+			"path": "gopkg.in/redis.v3/internal",
+			"revision": "5183f8dcde9737db7583dbfa9881800dba26e3fa",
+			"revisionTime": "2016-05-02T11:39:45Z"
+		},
+		{
+			"checksumSHA1": "tNI/mAuqqQqfYU4vuJghUroIts4=",
+			"path": "gopkg.in/redis.v3/internal/consistenthash",
+			"revision": "5183f8dcde9737db7583dbfa9881800dba26e3fa",
+			"revisionTime": "2016-05-02T11:39:45Z"
+		},
+		{
+			"checksumSHA1": "JvqkSear94dc+NgofRqBAUmLcN0=",
+			"path": "gopkg.in/redis.v3/internal/hashtag",
+			"revision": "5183f8dcde9737db7583dbfa9881800dba26e3fa",
+			"revisionTime": "2016-05-02T11:39:45Z"
+		},
+		{
+			"checksumSHA1": "ROpD4/McQLnnxpPenjA0mEZfTL8=",
+			"path": "gopkg.in/redis.v3/internal/pool",
+			"revision": "5183f8dcde9737db7583dbfa9881800dba26e3fa",
+			"revisionTime": "2016-05-02T11:39:45Z"
 		}
-	]
+	],
+	"rootPath": "github.com/tsuru/planb"
 }
