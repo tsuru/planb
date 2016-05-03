@@ -22,13 +22,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garyburd/redigo/redis"
 	"golang.org/x/net/websocket"
 	"gopkg.in/check.v1"
+	"gopkg.in/redis.v3"
 )
 
 type S struct {
-	redis redis.Conn
+	redis *redis.Client
 }
 
 var _ = check.Suite(&S{})
@@ -37,26 +37,17 @@ func Test(t *testing.T) {
 	check.TestingT(t)
 }
 
-func clearKeys(r redis.Conn) error {
-	keys, err := redis.Values(r.Do("KEYS", "frontend:*"))
-	if err != nil {
-		return err
-	}
-	keys2, err := redis.Values(r.Do("KEYS", "dead:*"))
-	if err != nil {
-		return err
-	}
-	for _, k := range append(keys, keys2...) {
-		_, err = r.Do("DEL", k)
-		if err != nil {
-			return err
-		}
+func clearKeys(r *redis.Client) error {
+	val := r.Keys("frontend:*").Val()
+	val = append(val, r.Keys("dead:*").Val()...)
+	if len(val) > 0 {
+		return r.Del(val...).Err()
 	}
 	return nil
 }
 
-func redisConn() (redis.Conn, error) {
-	return redis.Dial("tcp", "127.0.0.1:6379")
+func redisConn() (*redis.Client, error) {
+	return redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379", DB: 0}), nil
 }
 
 func (s *S) SetUpTest(c *check.C) {
@@ -221,7 +212,7 @@ func (s *S) TestServeHTTPStress(c *check.C) {
 }
 
 func (s *S) TestServeHTTPStressWithTimeoutBackend(c *check.C) {
-	_, err := s.redis.Do("RPUSH", "frontend:badfrontend.com", "badfrontend", "127.0.0.1:23771")
+	err := s.redis.RPush("frontend:badfrontend.com", "badfrontend", "127.0.0.1:23771").Err()
 	c.Assert(err, check.IsNil)
 	var logOutput bytes.Buffer
 	log.SetOutput(&logOutput)
@@ -279,9 +270,9 @@ func (s *S) TestServeHTTPRoundRobin(c *check.C) {
 		servers = append(servers, srv)
 	}
 	var err error
-	_, err = s.redis.Do("RPUSH", "frontend:myfrontend.com", "myfrontend", servers[0].URL, servers[1].URL)
+	err = s.redis.RPush("frontend:myfrontend.com", "myfrontend", servers[0].URL, servers[1].URL).Err()
 	c.Assert(err, check.IsNil)
-	_, err = s.redis.Do("RPUSH", "frontend:otherfrontend.com", "otherfrontend", servers[2].URL, servers[3].URL)
+	err = s.redis.RPush("frontend:otherfrontend.com", "otherfrontend", servers[2].URL, servers[3].URL).Err()
 	c.Assert(err, check.IsNil)
 	router := Router{}
 	err = router.Init()
@@ -306,7 +297,7 @@ func (s *S) TestServeHTTPRoundRobinMarksDead(c *check.C) {
 		rw.Write([]byte("hit"))
 	}))
 	defer srv.Close()
-	_, err := s.redis.Do("RPUSH", "frontend:mixfrontend.com", "mixfrontend", srv.URL, "http://127.0.0.1:34291")
+	err := s.redis.RPush("frontend:mixfrontend.com", "mixfrontend", srv.URL, "http://127.0.0.1:34291").Err()
 	c.Assert(err, check.IsNil)
 	router := Router{
 		DialTimeout: time.Second,
@@ -340,7 +331,7 @@ func (s *S) TestServeHTTPCache(c *check.C) {
 		defer srv.Close()
 		servers = append(servers, srv)
 	}
-	_, err := s.redis.Do("RPUSH", "frontend:myfrontend.com", "myfrontend", servers[0].URL, servers[1].URL)
+	err := s.redis.RPush("frontend:myfrontend.com", "myfrontend", servers[0].URL, servers[1].URL).Err()
 	c.Assert(err, check.IsNil)
 	router := Router{}
 	err = router.Init()
@@ -399,7 +390,7 @@ func (s *S) TestServeHTTPWebSocket(c *check.C) {
 		servers = append(servers, srv)
 	}
 	var err error
-	_, err = s.redis.Do("RPUSH", "frontend:myfrontend.com", "myfrontend", servers[0].URL, servers[1].URL)
+	err = s.redis.RPush("frontend:myfrontend.com", "myfrontend", servers[0].URL, servers[1].URL).Err()
 	c.Assert(err, check.IsNil)
 	router := Router{}
 	err = router.Init()
@@ -450,7 +441,7 @@ func (s *S) TestServeHTTPNoLogger(c *check.C) {
 		rw.Write([]byte("hit"))
 	}))
 	defer srv.Close()
-	_, err := s.redis.Do("RPUSH", "frontend:goodfrontend.com", "goodfrontend", srv.URL)
+	err := s.redis.RPush("frontend:goodfrontend.com", "goodfrontend", srv.URL).Err()
 	c.Assert(err, check.IsNil)
 	router := Router{}
 	err = router.Init()
@@ -470,7 +461,7 @@ func (s *S) TestChooseBackendRequestIDHeaderNotNil(c *check.C) {
 		rw.Write([]byte(msg + req.URL.Path))
 	}))
 	var err error
-	_, err = s.redis.Do("RPUSH", "frontend:myfrontend.com", "myfrontend", srv.URL)
+	err = s.redis.RPush("frontend:myfrontend.com", "myfrontend", srv.URL).Err()
 	c.Assert(err, check.IsNil)
 	router := Router{
 		RequestIDHeader: "Xpto",
@@ -489,7 +480,7 @@ func (s *S) TestChooseBackendRequestIDHeaderIsSetWhenItCamesEmpty(c *check.C) {
 		rw.Write([]byte(msg + req.URL.Path))
 	}))
 	var err error
-	_, err = s.redis.Do("RPUSH", "frontend:myfrontend.com", "myfrontend", srv.URL)
+	err = s.redis.RPush("frontend:myfrontend.com", "myfrontend", srv.URL).Err()
 	c.Assert(err, check.IsNil)
 	router := Router{
 		RequestIDHeader: "Xpto",
@@ -510,7 +501,7 @@ func (s *S) TestChooseBackendRequestIDHeaderNotChangedWhenAlreadyExists(c *check
 		rw.Write([]byte(msg + req.URL.Path))
 	}))
 	var err error
-	_, err = s.redis.Do("RPUSH", "frontend:myfrontend.com", "myfrontend", srv.URL)
+	err = s.redis.RPush("frontend:myfrontend.com", "myfrontend", srv.URL).Err()
 	c.Assert(err, check.IsNil)
 	router := Router{
 		RequestIDHeader: "Xpto",
@@ -531,7 +522,7 @@ func (s *S) TestChooseBackendRequestIDHeaderDoesNothingIfFlagIsNotSet(c *check.C
 		rw.Write([]byte(msg + req.URL.Path))
 	}))
 	var err error
-	_, err = s.redis.Do("RPUSH", "frontend:myfrontend.com", "myfrontend", srv.URL)
+	err = s.redis.RPush("frontend:myfrontend.com", "myfrontend", srv.URL).Err()
 	c.Assert(err, check.IsNil)
 	router := Router{}
 	err = router.Init()
@@ -566,16 +557,16 @@ func (s *S) TestServeHTTPStressAllLeakDetector(c *check.C) {
 	for i := range frontends {
 		frontend := fmt.Sprintf("stressfront%0d.com", i)
 		frontends[i] = frontend
-		_, err := s.redis.Do("RPUSH", "frontend:"+frontend, frontend)
+		err := s.redis.RPush("frontend:"+frontend, frontend).Err()
 		c.Assert(err, check.IsNil)
 		ratio := nServers / nFrontends
 		for j := 0; j < ratio; j++ {
-			_, err := s.redis.Do("RPUSH", "frontend:"+frontend, servers[(i*ratio)+j].URL)
+			err := s.redis.RPush("frontend:"+frontend, servers[(i*ratio)+j].URL).Err()
 			c.Assert(err, check.IsNil)
 		}
 		if i > nFrontends/2 {
 			// Add invalid backends forcing errors on half of the frontends
-			_, err := s.redis.Do("RPUSH", "frontend:"+frontend, "http://127.0.0.1:32412", "http://127.0.0.1:32413")
+			err := s.redis.RPush("frontend:"+frontend, "http://127.0.0.1:32412", "http://127.0.0.1:32413").Err()
 			c.Assert(err, check.IsNil)
 		}
 	}
@@ -636,7 +627,7 @@ func (s *S) TestServeHTTPHostDestination(c *check.C) {
 	c.Assert(err, check.IsNil)
 	_, port, _ := net.SplitHostPort(u.Host)
 	c.Assert(port, check.Not(check.Equals), "")
-	_, err = s.redis.Do("RPUSH", "frontend:goodfrontend.com", "goodfrontend", fmt.Sprintf("http://localhost:%s", port))
+	err = s.redis.RPush("frontend:goodfrontend.com", "goodfrontend", fmt.Sprintf("http://localhost:%s", port)).Err()
 	c.Assert(err, check.IsNil)
 	router := Router{}
 	err = router.Init()
@@ -663,7 +654,7 @@ func (s *S) TestServeHTTPIPDestination(c *check.C) {
 	c.Assert(err, check.IsNil)
 	_, port, _ := net.SplitHostPort(u.Host)
 	c.Assert(port, check.Not(check.Equals), "")
-	_, err = s.redis.Do("RPUSH", "frontend:goodfrontend.com", "goodfrontend", fmt.Sprintf("http://127.0.0.1:%s", port))
+	err = s.redis.RPush("frontend:goodfrontend.com", "goodfrontend", fmt.Sprintf("http://127.0.0.1:%s", port)).Err()
 	c.Assert(err, check.IsNil)
 	router := Router{}
 	err = router.Init()
@@ -686,7 +677,7 @@ func BenchmarkServeHTTP(b *testing.B) {
 	defer srv.Close()
 	r, _ := redisConn()
 	defer clearKeys(r)
-	r.Do("RPUSH", "frontend:benchfrontend.com", "benchfrontend", srv.URL)
+	r.RPush("frontend:benchfrontend.com", "benchfrontend", srv.URL)
 	router := Router{}
 	router.Init()
 	b.ResetTimer()
@@ -709,7 +700,7 @@ func BenchmarkServeHTTPNoAccessLog(b *testing.B) {
 	defer srv.Close()
 	r, _ := redisConn()
 	defer clearKeys(r)
-	r.Do("RPUSH", "frontend:benchfrontend.com", "benchfrontend", srv.URL)
+	r.RPush("frontend:benchfrontend.com", "benchfrontend", srv.URL)
 	router := Router{
 		LogPath: "none",
 	}
@@ -734,7 +725,7 @@ func BenchmarkServeHTTPNoRedisCache(b *testing.B) {
 	defer srv.Close()
 	r, _ := redisConn()
 	defer clearKeys(r)
-	r.Do("RPUSH", "frontend:benchfrontend.com", "benchfrontend", srv.URL)
+	r.RPush("frontend:benchfrontend.com", "benchfrontend", srv.URL)
 	router := Router{}
 	router.Init()
 	b.ResetTimer()
@@ -758,12 +749,12 @@ func BenchmarkServeHTTPMultipleBackendsNoCache(b *testing.B) {
 	defer srv.Close()
 	r, _ := redisConn()
 	defer clearKeys(r)
-	backends := make([]interface{}, 100)
+	backends := make([]string, 100)
 	for i := range backends {
 		backends[i] = srv.URL
 	}
-	backends = append([]interface{}{"frontend:benchfrontend.com", "benchfrontend"}, backends...)
-	r.Do("RPUSH", backends...)
+	backends = append([]string{"benchfrontend"}, backends...)
+	r.RPush("frontend:benchfrontend.com", backends...)
 	router := Router{}
 	router.Init()
 	b.ResetTimer()
