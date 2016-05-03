@@ -13,16 +13,6 @@
 			"revisionTime": "2015-10-29T20:11:27-07:00"
 		},
 		{
-			"path": "github.com/garyburd/redigo/internal",
-			"revision": "6ece6e0a09f28cc399b21550cbf37ab39ba63cce",
-			"revisionTime": "2015-10-29T16:55:27-07:00"
-		},
-		{
-			"path": "github.com/garyburd/redigo/redis",
-			"revision": "6ece6e0a09f28cc399b21550cbf37ab39ba63cce",
-			"revisionTime": "2015-10-29T16:55:27-07:00"
-		},
-		{
 			"path": "github.com/hashicorp/golang-lru",
 			"revision": "8e9be5c724e21eb7e1e35b170761707bf2bcec04",
 			"revisionTime": "2015-11-23T13:01:00-08:00"
