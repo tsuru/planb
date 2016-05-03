@@ -11,7 +11,7 @@ install:
 script:
   - go test -race ./...
   - ./check-leaks.sh
-  - go build -ldflags "-linkmode external -extldflags -static"
+  - CGO_ENABLED=0 go build
 after_success:
   - travis/docker_image.bash
 services:
@@ -20,3 +20,6 @@ services:
 matrix:
   allow_failures:
     - go: tip
+notifications:
+  slack:
+    secure: kCYIZs8J3NhrIlwR5fT9704UUeERAsNroU5FAlAi+Nk/GYWcRnxxt2Wc6AUkFCR+3Mei8c0fEZy8hejmn+UDgxCY0nln0l/g4Lmv47NsULsp9y1YQdxD1GGRLrSUPvYRBtEpog3K7+X/amb3pjzOjqrOY3n5vWGT9yagyLk95Fc=
