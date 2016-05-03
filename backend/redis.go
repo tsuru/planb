@@ -1,3 +1,7 @@
+// Copyright 2016 tsuru authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package backend
 
 import (
@@ -13,6 +17,7 @@ import (
 type redisBackend struct {
 	readClient  *redis.Client
 	writeClient *redis.Client
+	monitor     *redisMonitor
 }
 
 type RedisOptions struct {
@@ -85,7 +90,15 @@ func NewRedisBackend(readOpts, writeOpts RedisOptions) (RoutesBackend, error) {
 	if err != nil {
 		return nil, err
 	}
+	err = rClient.Ping().Err()
+	if err != nil {
+		return nil, err
+	}
 	wClient, err := newClient(&writeOpts)
+	if err != nil {
+		return nil, err
+	}
+	err = wClient.Ping().Err()
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +126,7 @@ func (b *redisBackend) Backends(host string) (string, []string, map[int]struct{}
 	if len(backends) < 2 {
 		return "", nil, nil, errors.New("no backends available")
 	}
-	return backends[0], backends[1:], deadMap, nil
+	return host, backends[1:], deadMap, nil
 }
 
 func (b *redisBackend) MarkDead(host string, backend string, backendIdx int, backendLen int, deadTTL int) error {
@@ -128,4 +141,16 @@ func (b *redisBackend) MarkDead(host string, backend string, backendIdx int, bac
 	}
 	deadMsg := fmt.Sprintf("%s;%s;%d;%d", host, backend, backendIdx, backendLen)
 	return b.writeClient.Publish("dead", deadMsg).Err()
+}
+
+func (b *redisBackend) StartMonitor() error {
+	var err error
+	b.monitor, err = newRedisMonitor(b.writeClient)
+	return err
+}
+
+func (b *redisBackend) StopMonitor() {
+	if b.monitor != nil {
+		b.monitor.stop()
+	}
 }

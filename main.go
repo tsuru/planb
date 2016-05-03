@@ -75,6 +75,12 @@ func runServer(c *cli.Context) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if c.Bool("active-healthcheck") {
+		err = routesBE.StartMonitor()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	router := Router{
 		backend:         routesBE,
 		LogPath:         c.String("access-log"),
@@ -93,6 +99,7 @@ func runServer(c *cli.Context) {
 	log.Printf("Listening on %v...\n", listener.Addr())
 	err = s.Serve(listener)
 	router.Stop()
+	routesBE.StopMonitor()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -197,6 +204,9 @@ The value 'none' can be used to disable access logs.`),
 		cli.StringFlag{
 			Name:  "request-id-header",
 			Usage: "Header to enable message tracking",
+		},
+		cli.BoolFlag{
+			Name: "active-healthcheck",
 		},
 	}
 	app.Version = "0.1.7"
