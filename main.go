@@ -5,13 +5,13 @@
 package main
 
 import (
-	"github.com/tsuru/planb/backend"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"regexp"
+	"runtime"
 	"runtime/pprof"
 	"strings"
 	"syscall"
@@ -19,6 +19,7 @@ import (
 
 	"github.com/braintree/manners"
 	"github.com/codegangsta/cli"
+	"github.com/tsuru/planb/backend"
 )
 
 func handleSignals(server *manners.GracefulServer) {
@@ -35,11 +36,18 @@ func handleSignals(server *manners.GracefulServer) {
 				go func() {
 					cpufile, _ := os.OpenFile("./planb_cpu.pprof", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
 					memfile, _ := os.OpenFile("./planb_mem.pprof", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
+					lockfile, _ := os.OpenFile("./planb_lock.pprof", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
 					log.Println("enabling profile...")
+					runtime.GC()
 					pprof.WriteHeapProfile(memfile)
 					memfile.Close()
+					runtime.SetBlockProfileRate(1)
+					time.Sleep(30 * time.Second)
+					pprof.Lookup("block").WriteTo(lockfile, 0)
+					runtime.SetBlockProfileRate(0)
+					lockfile.Close()
 					pprof.StartCPUProfile(cpufile)
-					time.Sleep(60 * time.Second)
+					time.Sleep(30 * time.Second)
 					pprof.StopCPUProfile()
 					cpufile.Close()
 					log.Println("profiling done")
