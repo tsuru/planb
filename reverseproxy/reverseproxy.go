@@ -10,6 +10,12 @@ import (
 	"github.com/tsuru/planb/log"
 )
 
+var (
+	noRouteResponseContent = []byte("no such route")
+	okResponse             = []byte("OK")
+	websocketUpgrade       = []byte("websocket")
+)
+
 type Router interface {
 	ChooseBackend(host string) (*RequestData, error)
 	EndRequest(reqData *RequestData, isDead bool, fn func() *log.LogEntry) error

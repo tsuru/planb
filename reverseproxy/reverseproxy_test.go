@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -68,7 +69,9 @@ func (r *recoderRouter) EndRequest(reqData *RequestData, isDead bool, fn func() 
 
 var (
 	nativeFactory = func() ReverseProxy { return &NativeReverseProxy{} }
+	fastFactory   = func() ReverseProxy { return &FastReverseProxy{} }
 	_             = check.Suite(&S{factory: nativeFactory})
+	_             = check.Suite(&S{factory: fastFactory})
 )
 
 func Test(t *testing.T) {
@@ -362,7 +365,30 @@ func (s *S) TestRoundTripStressWithTimeoutBackend(c *check.C) {
 	}
 }
 
+func (s *S) TestRoundTripPing(c *check.C) {
+	rp := s.factory()
+	router := &noopRouter{}
+	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router})
+	c.Assert(err, check.IsNil)
+	go rp.Listen()
+	defer rp.Stop()
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
+	c.Assert(err, check.IsNil)
+	req.Host = "__ping__"
+	rsp, err := http.DefaultClient.Do(req)
+	c.Assert(err, check.IsNil)
+	defer rsp.Body.Close()
+	c.Assert(rsp.StatusCode, check.Equals, 200)
+	data, err := ioutil.ReadAll(rsp.Body)
+	c.Assert(err, check.IsNil)
+	c.Assert(string(data), check.Equals, "OK")
+}
+
 func (s *S) TestRoundTripWebSocket(c *check.C) {
+	rp := s.factory()
+	if strings.Contains(fmt.Sprintf("%T\n", rp), "FastReverseProxy") {
+		c.Skip("websocket not supported by fasthttp reverse proxy")
+	}
 	srv := httptest.NewServer(websocket.Handler(func(conn *websocket.Conn) {
 		conn.Write([]byte("server-" + conn.Request().URL.Path))
 		buf := make([]byte, 5)
@@ -371,7 +397,6 @@ func (s *S) TestRoundTripWebSocket(c *check.C) {
 	}))
 	defer srv.Close()
 	router := &recoderRouter{dst: srv.URL}
-	rp := s.factory()
 	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router})
 	c.Assert(err, check.IsNil)
 	go rp.Listen()
@@ -440,6 +465,7 @@ func baseBenchmarkServeHTTP(rp ReverseProxy, b *testing.B) {
 			if rsp == nil || rsp.StatusCode != http.StatusOK {
 				b.Fatalf("invalid response %#v: %s", rsp, err)
 			}
+			ioutil.ReadAll(rsp.Body)
 			rsp.Body.Close()
 		}
 	})
@@ -480,4 +506,12 @@ func BenchmarkServeHTTP_Native(b *testing.B) {
 
 func BenchmarkServeHTTPInvalidFrontends_Native(b *testing.B) {
 	baseBenchmarkServeHTTPInvalidFrontends(nativeFactory(), b)
+}
+
+func BenchmarkServeHTTP_Fast(b *testing.B) {
+	baseBenchmarkServeHTTP(fastFactory(), b)
+}
+
+func BenchmarkServeHTTPInvalidFrontends_Fast(b *testing.B) {
+	baseBenchmarkServeHTTPInvalidFrontends(fastFactory(), b)
 }

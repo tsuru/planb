@@ -25,7 +25,7 @@ import (
 
 var (
 	emptyResponseBody   = &fixedReadCloser{}
-	noRouteResponseBody = &fixedReadCloser{value: []byte("no such route")}
+	noRouteResponseBody = &fixedReadCloser{value: noRouteResponseContent}
 	noopDirector        = func(*http.Request) {}
 
 	_ ReverseProxy = &NativeReverseProxy{}
@@ -105,7 +105,7 @@ func (rp *NativeReverseProxy) Stop() {
 func (rp *NativeReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if req.Host == "__ping__" && req.URL.Path == "/" {
 		rw.WriteHeader(http.StatusOK)
-		rw.Write([]byte("OK"))
+		rw.Write(okResponse)
 		return
 	}
 	upgrade := req.Header.Get("Upgrade")
@@ -273,7 +273,7 @@ func (rp *NativeReverseProxy) roundTripWithData(req *http.Request, reqData *Requ
 		isTimeout := atomic.LoadInt32(&timedout) == int32(1)
 		if isTimeout {
 			markAsDead = false
-			err = fmt.Errorf("request timed out after %v: %s", rp.RequestTimeout, err)
+			err = fmt.Errorf("request timed out after %v: %s", time.Since(reqData.StartTime), err)
 		} else {
 			err = fmt.Errorf("error in backend request: %s", err)
 		}
