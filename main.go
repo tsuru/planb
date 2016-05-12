@@ -5,6 +5,7 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"os"
 	"os/signal"
@@ -60,6 +61,15 @@ func handleSignals(server interface {
 }
 
 func runServer(c *cli.Context) {
+	var rp reverseproxy.ReverseProxy
+	switch c.String("engine") {
+	case "native":
+		rp = &reverseproxy.NativeReverseProxy{}
+	case "fasthttp":
+		rp = &reverseproxy.FastReverseProxy{}
+	default:
+		log.Fatal(errors.New("invalid engine"))
+	}
 	readOpts := backend.RedisOptions{
 		Host:          c.String("read-redis-host"),
 		Port:          c.Int("read-redis-port"),
@@ -95,8 +105,7 @@ func runServer(c *cli.Context) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	nativeRP := reverseproxy.NativeReverseProxy{}
-	addr, err := nativeRP.Initialize(reverseproxy.ReverseProxyConfig{
+	addr, err := rp.Initialize(reverseproxy.ReverseProxyConfig{
 		Listen:          c.String("listen"),
 		Router:          &r,
 		RequestIDHeader: c.String("request-id-header"),
@@ -104,9 +113,9 @@ func runServer(c *cli.Context) {
 		DialTimeout:     time.Duration(c.Int("dial-timeout")) * time.Second,
 		RequestTimeout:  time.Duration(c.Int("request-timeout")) * time.Second,
 	})
-	handleSignals(&nativeRP)
+	handleSignals(rp)
 	log.Printf("Listening on %s...\n", addr)
-	nativeRP.Listen()
+	rp.Listen()
 	r.Stop()
 	routesBE.StopMonitor()
 }
@@ -213,6 +222,11 @@ The value 'none' can be used to disable access logs.`),
 		},
 		cli.BoolFlag{
 			Name: "active-healthcheck",
+		},
+		cli.StringFlag{
+			Name:  "engine",
+			Value: "native",
+			Usage: fixUsage("Reverse proxy engine, options are 'native' and 'fasthttp'"),
 		},
 	}
 	app.Version = "0.1.7"
