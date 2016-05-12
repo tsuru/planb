@@ -1,8 +1,8 @@
-// Copyright 2015 tsuru authors. All rights reserved.
+// Copyright 2016 tsuru authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+package log
 
 import (
 	"fmt"
@@ -10,7 +10,6 @@ import (
 	"log"
 	"log/syslog"
 	"net"
-	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -21,20 +20,27 @@ const (
 )
 
 type Logger struct {
-	logChan    chan *logEntry
+	logChan    chan *LogEntry
 	done       chan bool
 	writer     io.WriteCloser
 	nextNotify <-chan time.Time
 }
 
-type logEntry struct {
-	now             time.Time
-	req             *http.Request
-	rsp             *http.Response
-	backendDuration time.Duration
-	requestIDHeader string
-	totalDuration   time.Duration
-	backendKey      string
+type LogEntry struct {
+	Now             time.Time
+	BackendDuration time.Duration
+	TotalDuration   time.Duration
+	BackendKey      string
+	RemoteAddr      string
+	Method          string
+	Path            string
+	Proto           string
+	Referer         string
+	UserAgent       string
+	RequestIDHeader string
+	RequestID       string
+	StatusCode      int
+	ContentLength   int64
 }
 
 func NewFileLogger(path string) (*Logger, error) {
@@ -58,13 +64,17 @@ func NewSyslogLogger() (*Logger, error) {
 	return NewWriterLogger(writer), nil
 }
 
+type syncCloser struct{ *os.File }
+
+func (n syncCloser) Close() error { return n.Sync() }
+
 func NewStdoutLogger() (*Logger, error) {
-	return NewWriterLogger(os.Stdout), nil
+	return NewWriterLogger(syncCloser{os.Stdout}), nil
 }
 
 func NewWriterLogger(writer io.WriteCloser) *Logger {
 	l := Logger{
-		logChan:    make(chan *logEntry, 10000),
+		logChan:    make(chan *LogEntry, 10000),
 		done:       make(chan bool),
 		writer:     writer,
 		nextNotify: time.After(0),
@@ -73,7 +83,7 @@ func NewWriterLogger(writer io.WriteCloser) *Logger {
 	return &l
 }
 
-func (l *Logger) MessageRaw(entry *logEntry) {
+func (l *Logger) MessageRaw(entry *LogEntry) {
 	select {
 	case l.logChan <- entry:
 	default:
@@ -95,11 +105,10 @@ func (l *Logger) logWriter() {
 	defer close(l.done)
 	defer l.writer.Close()
 	for el := range l.logChan {
-		nowFormatted := el.now.Format(TIME_HIPACHE_MODE)
-		remoteAddr := el.req.RemoteAddr
-		ip, _, _ := net.SplitHostPort(remoteAddr)
+		nowFormatted := el.Now.Format(TIME_HIPACHE_MODE)
+		ip, _, _ := net.SplitHostPort(el.RemoteAddr)
 		if ip == "" {
-			ip = remoteAddr
+			ip = el.RemoteAddr
 		}
 		if !strings.HasPrefix(ip, "::") {
 			ip = "::ffff:" + ip
@@ -108,18 +117,18 @@ func (l *Logger) logWriter() {
 			"%s - - [%s] \"%s %s %s\" %d %d \"%s\" \"%s\" \"%s:%s\" \"%s\" %0.3f %0.3f\n",
 			ip,
 			nowFormatted,
-			el.req.Method,
-			el.req.URL.Path,
-			el.req.Proto,
-			el.rsp.StatusCode,
-			el.rsp.ContentLength,
-			el.req.Referer(),
-			el.req.UserAgent(),
-			el.requestIDHeader,
-			el.req.Header.Get(el.requestIDHeader),
-			el.backendKey,
-			float64(el.totalDuration)/float64(time.Second),
-			float64(el.backendDuration)/float64(time.Second),
+			el.Method,
+			el.Path,
+			el.Proto,
+			el.StatusCode,
+			el.ContentLength,
+			el.Referer,
+			el.UserAgent,
+			el.RequestIDHeader,
+			el.RequestID,
+			el.BackendKey,
+			float64(el.TotalDuration)/float64(time.Second),
+			float64(el.BackendDuration)/float64(time.Second),
 		)
 	}
 }

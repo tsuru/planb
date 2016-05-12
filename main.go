@@ -1,4 +1,4 @@
-// Copyright 2015 tsuru authors. All rights reserved.
+// Copyright 2016 tsuru authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -6,8 +6,6 @@ package main
 
 import (
 	"log"
-	"net"
-	"net/http"
 	"os"
 	"os/signal"
 	"regexp"
@@ -17,17 +15,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/braintree/manners"
 	"github.com/codegangsta/cli"
 	"github.com/tsuru/planb/backend"
+	"github.com/tsuru/planb/reverseproxy"
+	"github.com/tsuru/planb/router"
 )
 
-func handleSignals(server *manners.GracefulServer) {
+func handleSignals(server interface {
+	Stop()
+}) {
 	sigChan := make(chan os.Signal, 3)
 	go func() {
 		for sig := range sigChan {
 			if sig == os.Interrupt || sig == os.Kill {
-				server.Close()
+				server.Stop()
 			}
 			if sig == syscall.SIGUSR1 {
 				pprof.Lookup("goroutine").WriteTo(os.Stdout, 2)
@@ -59,10 +60,6 @@ func handleSignals(server *manners.GracefulServer) {
 }
 
 func runServer(c *cli.Context) {
-	listener, err := net.Listen("tcp", c.String("listen"))
-	if err != nil {
-		log.Fatal(err)
-	}
 	readOpts := backend.RedisOptions{
 		Host:          c.String("read-redis-host"),
 		Port:          c.Int("read-redis-port"),
@@ -89,28 +86,29 @@ func runServer(c *cli.Context) {
 			log.Fatal(err)
 		}
 	}
-	router := Router{
-		backend:         routesBE,
-		LogPath:         c.String("access-log"),
-		RequestTimeout:  time.Duration(c.Int("request-timeout")) * time.Second,
-		DialTimeout:     time.Duration(c.Int("dial-timeout")) * time.Second,
-		DeadBackendTTL:  c.Int("dead-backend-time"),
-		FlushInterval:   time.Duration(c.Int("flush-interval")) * time.Millisecond,
+	r := router.Router{
+		Backend:        routesBE,
+		LogPath:        c.String("access-log"),
+		DeadBackendTTL: c.Int("dead-backend-time"),
+	}
+	err = r.Init()
+	if err != nil {
+		log.Fatal(err)
+	}
+	nativeRP := reverseproxy.NativeReverseProxy{}
+	addr, err := nativeRP.Initialize(reverseproxy.ReverseProxyConfig{
+		Listen:          c.String("listen"),
+		Router:          &r,
 		RequestIDHeader: c.String("request-id-header"),
-	}
-	err = router.Init()
-	if err != nil {
-		log.Fatal(err)
-	}
-	s := manners.NewWithServer(&http.Server{Handler: &router})
-	handleSignals(s)
-	log.Printf("Listening on %v...\n", listener.Addr())
-	err = s.Serve(listener)
-	router.Stop()
+		FlushInterval:   time.Duration(c.Int("flush-interval")) * time.Millisecond,
+		DialTimeout:     time.Duration(c.Int("dial-timeout")) * time.Second,
+		RequestTimeout:  time.Duration(c.Int("request-timeout")) * time.Second,
+	})
+	handleSignals(&nativeRP)
+	log.Printf("Listening on %s...\n", addr)
+	nativeRP.Listen()
+	r.Stop()
 	routesBE.StopMonitor()
-	if err != nil {
-		log.Fatal(err)
-	}
 }
 
 func fixUsage(s string) string {
