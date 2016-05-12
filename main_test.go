@@ -129,17 +129,19 @@ func (s *S) TestServeHTTPStressAllLeakDetector(c *check.C) {
 	for i := 0; i < nClients; i++ {
 		go func() {
 			for host := range rec {
-				req, _ := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
+				req, inErr := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
+				c.Assert(inErr, check.IsNil)
 				req.Host = host
-				rsp, _ := http.DefaultClient.Do(req)
+				rsp, inErr := http.DefaultClient.Do(req)
+				c.Assert(inErr, check.IsNil)
 				srvName, _ := ioutil.ReadAll(rsp.Body)
 				rsp.Body.Close()
-				wg.Done()
 				if len(srvName) != 0 {
 					mtx.Lock()
 					accessedBackends[string(srvName)] = struct{}{}
 					mtx.Unlock()
 				}
+				wg.Done()
 			}
 		}()
 	}
