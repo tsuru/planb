@@ -62,6 +62,9 @@ func (s *S) TearDownTest(c *check.C) {
 }
 
 func (s *S) TestServeHTTPStressAllLeakDetector(c *check.C) {
+	if testing.Short() {
+		c.Skip("this test takes a long time, specially with -race")
+	}
 	checkLeaksEnabled := os.Getenv("PLANB_CHECK_LEAKS") != ""
 	log.SetOutput(ioutil.Discard)
 	defer log.SetOutput(os.Stderr)

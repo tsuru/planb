@@ -9,7 +9,8 @@ env:
 install:
   - true
 script:
-  - go test -race ./...
+  - go test ./...
+  - go test -short -race ./...
   - ./check-leaks.sh
   - CGO_ENABLED=0 go build
 after_success:
