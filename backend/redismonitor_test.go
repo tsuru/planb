@@ -29,7 +29,6 @@ func (s *S) TestStartMonitorNotDead(c *check.C) {
 	c.Assert(err, check.IsNil)
 	err = s.be.StartMonitor()
 	c.Assert(err, check.IsNil)
-	defer s.be.StopMonitor()
 	err = s.be.MarkDead("f1.com", s1.URL, 0, 2, 30)
 	c.Assert(err, check.IsNil)
 	incCh := make(chan bool)
@@ -47,6 +46,7 @@ func (s *S) TestStartMonitorNotDead(c *check.C) {
 	case <-time.After(10 * time.Second):
 		c.Fatal("timeout waiting for server call")
 	}
+	s.be.StopMonitor()
 	c.Assert(atomic.LoadInt32(&s1CallCount), check.Equals, int32(1))
 	c.Assert(atomic.LoadInt32(&s2CallCount), check.Equals, int32(0))
 	members, err := s.redisConn.SMembers("dead:f1.com").Result()
@@ -74,7 +74,6 @@ func (s *S) TestStartMonitorDeadAndBack(c *check.C) {
 	c.Assert(err, check.IsNil)
 	err = s.be.StartMonitor()
 	c.Assert(err, check.IsNil)
-	defer s.be.StopMonitor()
 	err = s.be.MarkDead("f1.com", s1.URL, 0, 2, 30)
 	c.Assert(err, check.IsNil)
 	incCh := make(chan bool)
@@ -117,6 +116,7 @@ func (s *S) TestStartMonitorDeadAndBack(c *check.C) {
 	case <-time.After(10 * time.Second):
 		c.Fatal("timeout waiting for alive call")
 	}
+	s.be.StopMonitor()
 	members, err = s.redisConn.SMembers("dead:f1.com").Result()
 	c.Assert(err, check.IsNil)
 	c.Assert(members, check.DeepEquals, []string{})

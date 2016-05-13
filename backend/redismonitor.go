@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/redis.v3"
@@ -69,7 +70,9 @@ func (b *redisMonitor) start() error {
 		return err
 	}
 	go func() {
+		wg := sync.WaitGroup{}
 		defer close(b.done)
+		defer wg.Wait()
 		defer pubsub.Close()
 		msgCh := make(chan string)
 		for {
@@ -88,7 +91,11 @@ func (b *redisMonitor) start() error {
 				if msg == "" {
 					continue
 				}
-				go b.watch(msg)
+				wg.Add(1)
+				go func(msg string) {
+					defer wg.Done()
+					b.watch(msg)
+				}(msg)
 			}
 		}
 	}()
