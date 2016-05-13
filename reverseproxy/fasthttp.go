@@ -6,7 +6,6 @@ package reverseproxy
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -161,8 +160,8 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 	}
 	upgrade := req.Header.Peek("Upgrade")
 	if len(upgrade) > 0 && bytes.Compare(bytes.ToLower(upgrade), websocketUpgrade) == 0 {
-		log.LogError(reqData.String(), string(uri.Path()), errors.New("websocket not supported"))
-		resp.SetStatusCode(http.StatusBadRequest)
+		resp.SkipResponse = true
+		rp.serveWebsocket(dstHost, reqData, ctx)
 		return
 	}
 	var backendDuration time.Duration

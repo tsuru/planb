@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -386,9 +385,6 @@ func (s *S) TestRoundTripPing(c *check.C) {
 
 func (s *S) TestRoundTripWebSocket(c *check.C) {
 	rp := s.factory()
-	if strings.Contains(fmt.Sprintf("%T\n", rp), "FastReverseProxy") {
-		c.Skip("websocket not supported by fasthttp reverse proxy")
-	}
 	srv := httptest.NewServer(websocket.Handler(func(conn *websocket.Conn) {
 		conn.Write([]byte("server-" + conn.Request().URL.Path))
 		buf := make([]byte, 5)
