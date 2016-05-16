@@ -77,6 +77,10 @@ func Test(t *testing.T) {
 	check.TestingT(t)
 }
 
+func (s *S) SetUpTest(c *check.C) {
+	c.Logf("testing %T", s.factory())
+}
+
 func (s *S) TestRoundTrip(c *check.C) {
 	var receivedReq *http.Request
 	ts := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
@@ -381,6 +385,89 @@ func (s *S) TestRoundTripPing(c *check.C) {
 	data, err := ioutil.ReadAll(rsp.Body)
 	c.Assert(err, check.IsNil)
 	c.Assert(string(data), check.Equals, "OK")
+}
+
+func (s *S) TestRoundTripStreamingRequest(c *check.C) {
+	rp := s.factory()
+	if fmt.Sprintf("%T", rp) == "*reverseproxy.FastReverseProxy" {
+		c.Skip("fasthttp does not support request streaming")
+	}
+	var receivedReq *http.Request
+	msgCh := make(chan string)
+	ts := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		flusher, ok := rw.(http.Flusher)
+		c.Assert(ok, check.Equals, true)
+		receivedReq = req
+		rw.Write([]byte("wxyz"))
+		flusher.Flush()
+		for msg := range msgCh {
+			rw.Write([]byte(msg))
+			flusher.Flush()
+		}
+	}))
+	defer ts.Close()
+	router := &recoderRouter{dst: ts.URL}
+
+	addr, err := rp.Initialize(ReverseProxyConfig{
+		Listen:        "127.0.0.1:0",
+		Router:        router,
+		FlushInterval: 100 * time.Millisecond,
+	})
+	c.Assert(err, check.IsNil)
+	go rp.Listen()
+	defer rp.Stop()
+	defer close(msgCh)
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
+	c.Assert(err, check.IsNil)
+	req.Host = "myhost.com"
+	req.Header.Set("Content-Encoding", "my/encoding")
+	var rsp *http.Response
+	select {
+	case <-waitFor(func() {
+		rsp, err = http.DefaultClient.Do(req)
+		c.Assert(err, check.IsNil)
+	}):
+	case <-time.After(5 * time.Second):
+		c.Fatal("timeout after 5 seconds waiting for server initial response")
+	}
+	defer rsp.Body.Close()
+	c.Assert(rsp.StatusCode, check.Equals, 200)
+	recv := func(msg string, send bool) {
+		if send {
+			msgCh <- msg
+		}
+		buf := make([]byte, len(msg))
+		n, err := rsp.Body.Read(buf)
+		c.Assert(err, check.IsNil)
+		c.Assert(n, check.Equals, 4, check.Commentf("waiting for %s", msg))
+		c.Assert(string(buf), check.Equals, msg)
+	}
+	select {
+	case <-waitFor(func() { recv("wxyz", false) }):
+	case <-time.After(5 * time.Second):
+		c.Fatal("timeout after 5 seconds waiting for server message")
+	}
+	select {
+	case <-waitFor(func() { recv("abcd", true) }):
+	case <-time.After(5 * time.Second):
+		c.Fatal("timeout after 5 seconds waiting for server message")
+	}
+	select {
+	case <-waitFor(func() { recv("efjk", true) }):
+	case <-time.After(5 * time.Second):
+		c.Fatal("timeout after 5 seconds waiting for server message")
+	}
+	c.Assert(receivedReq.Host, check.Equals, "myhost.com")
+	c.Assert(receivedReq.Header.Get("Content-Encoding"), check.Equals, "my/encoding")
+}
+
+func waitFor(fn func()) chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn()
+	}()
+	return done
 }
 
 func (s *S) TestRoundTripWebSocket(c *check.C) {

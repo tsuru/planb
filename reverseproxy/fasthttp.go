@@ -189,7 +189,6 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 	}
 	isDebug := len(req.Header.Peek("X-Debug-Router")) > 0
 	req.Header.Del("X-Debug-Router")
-
 	if dstHost == "" {
 		resp.SetStatusCode(http.StatusBadRequest)
 		resp.SetBody(noRouteResponseContent)
