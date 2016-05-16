@@ -74,9 +74,11 @@
 			"revisionTime": "2016-02-20T15:49:07Z"
 		},
 		{
+			"checksumSHA1": "I2d7Kn572Fz02mnnlcI4MHXCu0c=",
+			"origin": "github.com/tsuru/planb/vendor/gopkg.in/check.v1",
 			"path": "gopkg.in/check.v1",
-			"revision": "64131543e7896d5bcc6bd5a76287eb75ea96c673",
-			"revisionTime": "2014-10-24T11:38:53-02:00"
+			"revision": "4f90aeace3a26ad7021961c297b22c42160c7b25",
+			"revisionTime": "2016-01-05T16:49:36Z"
 		},
 		{
 			"checksumSHA1": "m3qkRWmZBzqd+Pnd+XsI7gxGOqU=",
