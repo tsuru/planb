@@ -109,6 +109,7 @@ func (s *S) TestRoundTrip(c *check.C) {
 	c.Assert(receivedReq.Host, check.Equals, "myhost.com")
 	c.Assert(receivedReq.Header.Get("X-My-Header"), check.Equals, "myvalue")
 	c.Assert(receivedReq.Header.Get("X-Host"), check.Equals, "")
+	c.Assert(receivedReq.Header.Get("X-Forwarded-Host"), check.Equals, "")
 	c.Assert(receivedReq.Header.Get("X-RID"), check.Not(check.Equals), "")
 	c.Assert(router.resultHost, check.Equals, "myhost.com")
 	c.Assert(router.resultReqData, check.DeepEquals, &RequestData{
@@ -172,6 +173,7 @@ func (s *S) TestRoundTripWithExistingRequestID(c *check.C) {
 	c.Assert(receivedReq.Host, check.Equals, "myhost.com")
 	c.Assert(receivedReq.Header.Get("X-My-Header"), check.Equals, "myvalue")
 	c.Assert(receivedReq.Header.Get("X-Host"), check.Equals, "")
+	c.Assert(receivedReq.Header.Get("X-Forwarded-Host"), check.Equals, "")
 	c.Assert(receivedReq.Header.Get("X-RID"), check.Equals, "abc")
 }
 
@@ -207,6 +209,7 @@ func (s *S) TestRoundTripHostDestination(c *check.C) {
 	c.Assert(receivedReq.Host, check.Equals, "localhost")
 	c.Assert(receivedReq.Header.Get("X-My-Header"), check.Equals, "myvalue")
 	c.Assert(receivedReq.Header.Get("X-Host"), check.Equals, "myhost.com")
+	c.Assert(receivedReq.Header.Get("X-Forwarded-Host"), check.Equals, "myhost.com")
 	c.Assert(router.resultHost, check.Equals, "myhost.com")
 	c.Assert(router.resultReqData, check.DeepEquals, &RequestData{
 		Backend:    router.dst,
