@@ -214,6 +214,7 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 	isIP := net.ParseIP(hostOnly) != nil
 	if !isIP {
 		req.Header.SetBytesV("X-Host", uri.Host())
+		req.Header.SetBytesV("X-Forwarded-Host", uri.Host())
 		uri.SetHost(hostOnly)
 	}
 	client := rp.getClient(dstHost, dstScheme == "https")

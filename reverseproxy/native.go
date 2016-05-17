@@ -260,6 +260,7 @@ func (rp *NativeReverseProxy) roundTripWithData(req *http.Request, reqData *Requ
 	isIP := net.ParseIP(host) != nil
 	if !isIP {
 		req.Header.Set("X-Host", req.Host)
+		req.Header.Set("X-Forwarded-Host", req.Host)
 		req.Host = host
 	}
 	t0 := time.Now().UTC()
