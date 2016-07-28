@@ -113,6 +113,9 @@ func runServer(c *cli.Context) {
 		DialTimeout:     time.Duration(c.Int("dial-timeout")) * time.Second,
 		RequestTimeout:  time.Duration(c.Int("request-timeout")) * time.Second,
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 	handleSignals(rp)
 	log.Printf("Listening on %s...\n", addr)
 	rp.Listen()
