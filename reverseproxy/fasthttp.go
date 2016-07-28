@@ -108,7 +108,8 @@ func (rp *FastReverseProxy) serveWebsocket(dstHost string, reqData *RequestData,
 		log.LogError(reqData.String(), string(uri.Path()), err)
 		return
 	}
-	if clientIP, _, err := net.SplitHostPort(ctx.RemoteAddr().String()); err == nil {
+	var clientIP string
+	if clientIP, _, err = net.SplitHostPort(ctx.RemoteAddr().String()); err == nil {
 		if prior := string(req.Header.Peek("X-Forwarded-For")); len(prior) > 0 {
 			clientIP = prior + ", " + clientIP
 		}
@@ -200,7 +201,8 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	if rp.RequestIDHeader != "" && len(req.Header.Peek(rp.RequestIDHeader)) == 0 {
-		unparsedID, err := uuid.NewV4()
+		var unparsedID *uuid.UUID
+		unparsedID, err = uuid.NewV4()
 		if err == nil {
 			req.Header.Set(rp.RequestIDHeader, unparsedID.String())
 		} else {

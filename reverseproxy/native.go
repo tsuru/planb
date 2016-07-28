@@ -144,7 +144,8 @@ func (rp *NativeReverseProxy) serveWebsocket(rw http.ResponseWriter, req *http.R
 		return reqData, err
 	}
 	defer conn.Close()
-	if clientIP, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
+	var clientIP string
+	if clientIP, _, err = net.SplitHostPort(req.RemoteAddr); err == nil {
 		if prior, ok := req.Header["X-Forwarded-For"]; ok {
 			clientIP = strings.Join(prior, ", ") + ", " + clientIP
 		}
