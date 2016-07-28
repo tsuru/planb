@@ -134,7 +134,26 @@ func (rp *FastReverseProxy) serveWebsocket(dstHost string, reqData *RequestData,
 	})
 }
 
+func (rp *FastReverseProxy) chooseBackend(host string) (*RequestData, string, string, error) {
+	var dstScheme string
+	var dstHost string
+	reqData, err := rp.Router.ChooseBackend(host)
+	if err != nil {
+		return reqData, dstScheme, dstHost, err
+	}
+	u, err := url.Parse(reqData.Backend)
+	if err == nil {
+		dstScheme = u.Scheme
+		dstHost = u.Host
+	}
+	if dstHost == "" {
+		dstHost = reqData.Backend
+	}
+	return reqData, dstScheme, dstHost, nil
+}
+
 func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
+	var backendDuration time.Duration
 	req := &ctx.Request
 	resp := &ctx.Response
 	host := string(req.Header.Host())
@@ -143,29 +162,7 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 		resp.SetBody(okResponse)
 		return
 	}
-	reqData, err := rp.Router.ChooseBackend(host)
-	if err != nil {
-		log.LogError(reqData.String(), string(uri.Path()), err)
-	}
-	dstScheme := ""
-	dstHost := ""
-	u, err := url.Parse(reqData.Backend)
-	if err == nil {
-		dstScheme = u.Scheme
-		dstHost = u.Host
-	} else {
-		log.LogError(reqData.String(), string(uri.Path()), err)
-	}
-	if dstHost == "" {
-		dstHost = reqData.Backend
-	}
-	upgrade := req.Header.Peek("Upgrade")
-	if len(upgrade) > 0 && bytes.Compare(bytes.ToLower(upgrade), websocketUpgrade) == 0 {
-		resp.SkipResponse = true
-		rp.serveWebsocket(dstHost, reqData, ctx)
-		return
-	}
-	var backendDuration time.Duration
+	reqData, dstScheme, dstHost, err := rp.chooseBackend(host)
 	logEntry := func() *log.LogEntry {
 		proto := "HTTP/1.0"
 		if req.Header.IsHTTP11() {
@@ -190,14 +187,32 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 	}
 	isDebug := len(req.Header.Peek("X-Debug-Router")) > 0
 	req.Header.Del("X-Debug-Router")
-	if dstHost == "" {
-		resp.SetStatusCode(http.StatusBadRequest)
-		resp.SetBody(noRouteResponseContent)
+	if err != nil || dstHost == "" {
+		if err != nil {
+			log.LogError(reqData.String(), string(uri.Path()), err)
+		}
+		var status int
+		var body []byte
+		switch err {
+		case nil, ErrNoRegisteredBackends:
+			status = http.StatusBadRequest
+			body = noRouteResponseContent
+		default:
+			status = http.StatusServiceUnavailable
+		}
+		resp.SetStatusCode(status)
+		resp.SetBody(body)
 		rp.debugHeaders(resp, reqData, isDebug)
 		endErr := rp.Router.EndRequest(reqData, false, logEntry)
 		if endErr != nil {
 			log.LogError(reqData.String(), string(uri.Path()), endErr)
 		}
+		return
+	}
+	upgrade := req.Header.Peek("Upgrade")
+	if len(upgrade) > 0 && bytes.Compare(bytes.ToLower(upgrade), websocketUpgrade) == 0 {
+		resp.SkipResponse = true
+		rp.serveWebsocket(dstHost, reqData, ctx)
 		return
 	}
 	if rp.RequestIDHeader != "" && len(req.Header.Peek(rp.RequestIDHeader)) == 0 {

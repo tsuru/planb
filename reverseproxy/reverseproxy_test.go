@@ -5,6 +5,7 @@
 package reverseproxy
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -46,6 +47,7 @@ type recoderRouter struct {
 	resultReqData *RequestData
 	resultIsDead  bool
 	logEntry      *log.LogEntry
+	errChoose     error
 }
 
 func (r *recoderRouter) ChooseBackend(host string) (*RequestData, error) {
@@ -56,7 +58,7 @@ func (r *recoderRouter) ChooseBackend(host string) (*RequestData, error) {
 		BackendKey: host,
 		BackendLen: 1,
 		Host:       host,
-	}, nil
+	}, r.errChoose
 }
 
 func (r *recoderRouter) EndRequest(reqData *RequestData, isDead bool, fn func() *log.LogEntry) error {
@@ -248,6 +250,93 @@ func (s *S) TestRoundTripWithError(c *check.C) {
 		Host:       "myhost.com",
 	})
 	c.Assert(router.resultIsDead, check.Equals, true)
+}
+
+func (s *S) TestRoundTripWithErrNoRegisteredBackends(c *check.C) {
+	router := &recoderRouter{errChoose: ErrNoRegisteredBackends}
+	rp := s.factory()
+	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router})
+	c.Assert(err, check.IsNil)
+	go rp.Listen()
+	defer rp.Stop()
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
+	c.Assert(err, check.IsNil)
+	req.Host = "myhost.com"
+	req.Header.Set("X-My-Header", "myvalue")
+	rsp, err := http.DefaultClient.Do(req)
+	c.Assert(err, check.IsNil)
+	defer rsp.Body.Close()
+	c.Assert(rsp.StatusCode, check.Equals, 400)
+	data, err := ioutil.ReadAll(rsp.Body)
+	c.Assert(err, check.IsNil)
+	c.Assert(string(data), check.Equals, "no such route")
+	c.Assert(router.resultHost, check.Equals, "myhost.com")
+	c.Assert(router.resultReqData, check.DeepEquals, &RequestData{
+		Backend:    router.dst,
+		BackendIdx: 0,
+		BackendKey: "myhost.com",
+		BackendLen: 1,
+		Host:       "myhost.com",
+	})
+	c.Assert(router.resultIsDead, check.Equals, false)
+}
+
+func (s *S) TestRoundTripWithErrAllBackendsDead(c *check.C) {
+	router := &recoderRouter{errChoose: ErrAllBackendsDead}
+	rp := s.factory()
+	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router})
+	c.Assert(err, check.IsNil)
+	go rp.Listen()
+	defer rp.Stop()
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
+	c.Assert(err, check.IsNil)
+	req.Host = "myhost.com"
+	req.Header.Set("X-My-Header", "myvalue")
+	rsp, err := http.DefaultClient.Do(req)
+	c.Assert(err, check.IsNil)
+	defer rsp.Body.Close()
+	c.Assert(rsp.StatusCode, check.Equals, 503)
+	data, err := ioutil.ReadAll(rsp.Body)
+	c.Assert(err, check.IsNil)
+	c.Assert(string(data), check.Equals, "")
+	c.Assert(router.resultHost, check.Equals, "myhost.com")
+	c.Assert(router.resultReqData, check.DeepEquals, &RequestData{
+		Backend:    router.dst,
+		BackendIdx: 0,
+		BackendKey: "myhost.com",
+		BackendLen: 1,
+		Host:       "myhost.com",
+	})
+	c.Assert(router.resultIsDead, check.Equals, false)
+}
+
+func (s *S) TestRoundTripWithErrOther(c *check.C) {
+	router := &recoderRouter{errChoose: errors.New("other error")}
+	rp := s.factory()
+	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router})
+	c.Assert(err, check.IsNil)
+	go rp.Listen()
+	defer rp.Stop()
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
+	c.Assert(err, check.IsNil)
+	req.Host = "myhost.com"
+	req.Header.Set("X-My-Header", "myvalue")
+	rsp, err := http.DefaultClient.Do(req)
+	c.Assert(err, check.IsNil)
+	defer rsp.Body.Close()
+	c.Assert(rsp.StatusCode, check.Equals, 503)
+	data, err := ioutil.ReadAll(rsp.Body)
+	c.Assert(err, check.IsNil)
+	c.Assert(string(data), check.Equals, "")
+	c.Assert(router.resultHost, check.Equals, "myhost.com")
+	c.Assert(router.resultReqData, check.DeepEquals, &RequestData{
+		Backend:    router.dst,
+		BackendIdx: 0,
+		BackendKey: "myhost.com",
+		BackendLen: 1,
+		Host:       "myhost.com",
+	})
+	c.Assert(router.resultIsDead, check.Equals, false)
 }
 
 func (s *S) TestRoundTripDebugHeaders(c *check.C) {

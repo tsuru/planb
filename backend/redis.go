@@ -124,7 +124,7 @@ func (b *redisBackend) Backends(host string) (string, []string, map[int]struct{}
 	}
 	backends := rangeVal.Val()
 	if len(backends) < 2 {
-		return "", nil, nil, errors.New("no backends available")
+		return "", nil, nil, ErrNoBackends
 	}
 	return host, backends[1:], deadMap, nil
 }

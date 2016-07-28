@@ -5,8 +5,6 @@
 package router
 
 import (
-	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -41,7 +39,8 @@ func (s *backendSet) Expired() bool {
 func (router *Router) Init() error {
 	var err error
 	if router.Backend == nil {
-		be, err := backend.NewRedisBackend(backend.RedisOptions{}, backend.RedisOptions{})
+		var be backend.RoutesBackend
+		be, err = backend.NewRedisBackend(backend.RedisOptions{}, backend.RedisOptions{})
 		if err != nil {
 			return err
 		}
@@ -110,7 +109,7 @@ func (router *Router) ChooseBackend(host string) (*reverseproxy.RequestData, err
 		}
 	}
 	if toUseNumber == -1 {
-		return reqData, errors.New("all backends are dead")
+		return reqData, reverseproxy.ErrAllBackendsDead
 	}
 	reqData.BackendIdx = toUseNumber
 	reqData.Backend = set.backends[toUseNumber]
@@ -145,7 +144,10 @@ func (router *Router) getBackends(host string) (*backendSet, error) {
 	var err error
 	set.id, set.backends, set.dead, err = router.Backend.Backends(host)
 	if err != nil {
-		return nil, fmt.Errorf("error running routes backend commands: %s", err)
+		if err == backend.ErrNoBackends {
+			return nil, reverseproxy.ErrNoRegisteredBackends
+		}
+		return nil, err
 	}
 	set.expires = time.Now().Add(2 * time.Second)
 	router.cache.Add(host, set)

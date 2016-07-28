@@ -84,7 +84,7 @@ func (s *S) TestChooseBackendNotFound(c *check.C) {
 	err := router.Init()
 	c.Assert(err, check.IsNil)
 	reqData, err := router.ChooseBackend("myfrontend.com")
-	c.Assert(err, check.ErrorMatches, `error running routes backend commands: no backends available`)
+	c.Assert(err, check.Equals, reverseproxy.ErrNoRegisteredBackends)
 	c.Assert(reqData.StartTime.IsZero(), check.Equals, false)
 	reqData.StartTime = time.Time{}
 	c.Assert(reqData, check.DeepEquals, &reverseproxy.RequestData{
@@ -103,7 +103,7 @@ func (s *S) TestChooseBackendNoBackends(c *check.C) {
 	err = s.redis.RPush("frontend:myfrontend.com", "myfrontend").Err()
 	c.Assert(err, check.IsNil)
 	reqData, err := router.ChooseBackend("myfrontend.com")
-	c.Assert(err, check.ErrorMatches, `error running routes backend commands: no backends available`)
+	c.Assert(err, check.Equals, reverseproxy.ErrNoRegisteredBackends)
 	c.Assert(reqData.StartTime.IsZero(), check.Equals, false)
 	reqData.StartTime = time.Time{}
 	c.Assert(reqData, check.DeepEquals, &reverseproxy.RequestData{
@@ -124,7 +124,7 @@ func (s *S) TestChooseBackendAllDead(c *check.C) {
 	err = s.redis.SAdd("dead:myfrontend.com", "0").Err()
 	c.Assert(err, check.IsNil)
 	reqData, err := router.ChooseBackend("myfrontend.com")
-	c.Assert(err, check.ErrorMatches, `all backends are dead`)
+	c.Assert(err, check.Equals, reverseproxy.ErrAllBackendsDead)
 	c.Assert(reqData.StartTime.IsZero(), check.Equals, false)
 	reqData.StartTime = time.Time{}
 	c.Assert(reqData, check.DeepEquals, &reverseproxy.RequestData{

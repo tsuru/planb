@@ -5,6 +5,7 @@
 package reverseproxy
 
 import (
+	"errors"
 	"time"
 
 	"github.com/tsuru/planb/log"
@@ -14,6 +15,9 @@ var (
 	noRouteResponseContent = []byte("no such route")
 	okResponse             = []byte("OK")
 	websocketUpgrade       = []byte("websocket")
+
+	ErrAllBackendsDead      = errors.New("all backends are dead")
+	ErrNoRegisteredBackends = errors.New("no backends registered for host")
 )
 
 type Router interface {
@@ -43,6 +47,7 @@ type RequestData struct {
 	BackendKey string
 	Host       string
 	StartTime  time.Time
+	AllDead    bool
 }
 
 func (r *RequestData) String() string {
