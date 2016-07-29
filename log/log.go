@@ -19,6 +19,10 @@ const (
 	TIME_HIPACHE_MODE = "02/Jan/2006:15:04:05 -0700"
 )
 
+var (
+	ErrorLogger = log.New(os.Stderr, "", log.LstdFlags)
+)
+
 type Logger struct {
 	logChan    chan *LogEntry
 	done       chan bool
@@ -134,5 +138,5 @@ func (l *Logger) logWriter() {
 }
 
 func LogError(location string, path string, err error) {
-	log.Print("ERROR in ", location, " - ", path, " - ", err.Error())
+	ErrorLogger.Print("ERROR in ", location, " - ", path, " - ", err.Error())
 }
