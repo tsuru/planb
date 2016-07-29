@@ -271,13 +271,18 @@ func (rp *NativeReverseProxy) roundTripWithData(req *http.Request, reqData *Requ
 	backendDuration := time.Since(t0)
 	markAsDead := false
 	if err != nil {
+		var dialTimeout, requestTimeout bool
 		if netErr, ok := err.(net.Error); ok {
 			markAsDead = !netErr.Temporary()
+			dialTimeout = netErr.Timeout()
 		}
-		isTimeout := atomic.LoadInt32(&timedout) == int32(1)
-		if isTimeout {
+		requestTimeout = atomic.LoadInt32(&timedout) == int32(1)
+		if requestTimeout {
 			markAsDead = false
-			err = fmt.Errorf("request timed out after %v: %s", time.Since(reqData.StartTime), err)
+			err = fmt.Errorf("request timeout after %v: %s", time.Since(reqData.StartTime), err)
+		} else if dialTimeout {
+			markAsDead = true
+			err = fmt.Errorf("dial timeout after %v: %s", time.Since(reqData.StartTime), err)
 		} else {
 			err = fmt.Errorf("error in backend request: %s", err)
 		}

@@ -5,9 +5,11 @@
 package reverseproxy
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/ioutil"
+	stdlog "log"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -551,6 +553,65 @@ func (s *S) TestRoundTripStreamingRequest(c *check.C) {
 	}
 	c.Assert(receivedReq.Host, check.Equals, "myhost.com")
 	c.Assert(receivedReq.Header.Get("Content-Encoding"), check.Equals, "my/encoding")
+}
+
+func (s *S) TestRoundTripTimeout(c *check.C) {
+	rp := s.factory()
+	if fmt.Sprintf("%T", rp) == "*reverseproxy.FastReverseProxy" {
+		c.Skip("fasthttp is not handling timeouts correctly")
+	}
+	old := log.ErrorLogger
+	logBuf := bytes.NewBuffer(nil)
+	log.ErrorLogger = stdlog.New(logBuf, "", 0)
+	defer func() { log.ErrorLogger = old }()
+	blk := make(chan struct{})
+	ts := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		<-blk
+		rw.WriteHeader(200)
+		rw.Write([]byte("my result"))
+	}))
+	defer ts.Close()
+	defer close(blk)
+	router := &recoderRouter{dst: ts.URL}
+	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router, RequestTimeout: time.Second})
+	c.Assert(err, check.IsNil)
+	go rp.Listen()
+	defer rp.Stop()
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
+	c.Assert(err, check.IsNil)
+	req.Host = "myhost.com"
+	rsp, err := http.DefaultClient.Do(req)
+	c.Assert(err, check.IsNil)
+	defer rsp.Body.Close()
+	c.Assert(rsp.StatusCode, check.Equals, 503)
+	c.Assert(router.resultIsDead, check.Equals, false)
+	c.Assert(logBuf.String(), check.Matches, `(?s).*request timeout after .+:.*`)
+}
+
+func (s *S) TestRoundTripTimeoutDial(c *check.C) {
+	rp := s.factory()
+	if fmt.Sprintf("%T", rp) == "*reverseproxy.FastReverseProxy" {
+		c.Skip("fasthttp is not handling timeouts correctly")
+	}
+	old := log.ErrorLogger
+	logBuf := bytes.NewBuffer(nil)
+	log.ErrorLogger = stdlog.New(logBuf, "", 0)
+	defer func() { log.ErrorLogger = old }()
+	// Reserved TEST-NET IP should cause
+	router := &recoderRouter{dst: "http://192.0.2.1:49151"}
+	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router, DialTimeout: time.Second, RequestTimeout: 10 * time.Second})
+	c.Assert(err, check.IsNil)
+	go rp.Listen()
+	defer rp.Stop()
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
+	c.Assert(err, check.IsNil)
+	req.Host = "myhost.com"
+	rsp, err := http.DefaultClient.Do(req)
+	c.Assert(err, check.IsNil)
+	defer rsp.Body.Close()
+	c.Assert(rsp.StatusCode, check.Equals, 503)
+	c.Assert(router.resultIsDead, check.Equals, true)
+	c.Assert(logBuf.String(), check.Matches, `(?s).*dial timeout after .+:.*`)
 }
 
 func waitFor(fn func()) chan struct{} {
