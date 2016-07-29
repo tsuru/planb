@@ -57,3 +57,7 @@ func (r *RequestData) String() string {
 	}
 	return r.Host + " -> " + back
 }
+
+func (r *RequestData) logError(path string, rid string, err error) {
+	log.ErrorLogger.Print("ERROR in ", r.String(), " - ", path, " - ", rid, " - ", err.Error())
+}

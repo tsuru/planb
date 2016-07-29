@@ -105,7 +105,7 @@ func (rp *FastReverseProxy) serveWebsocket(dstHost string, reqData *RequestData,
 	uri.SetHost(dstHost)
 	dstConn, err := rp.dialFunc(dstHost)
 	if err != nil {
-		log.LogError(reqData.String(), string(uri.Path()), err)
+		reqData.logError(string(uri.Path()), rp.ridString(req), err)
 		return
 	}
 	var clientIP string
@@ -117,7 +117,7 @@ func (rp *FastReverseProxy) serveWebsocket(dstHost string, reqData *RequestData,
 	}
 	_, err = req.WriteTo(dstConn)
 	if err != nil {
-		log.LogError(reqData.String(), string(uri.Path()), err)
+		reqData.logError(string(uri.Path()), rp.ridString(req), err)
 		return
 	}
 	ctx.Hijack(func(conn net.Conn) {
@@ -152,6 +152,10 @@ func (rp *FastReverseProxy) chooseBackend(host string) (*RequestData, string, st
 	return reqData, dstScheme, dstHost, nil
 }
 
+func (rp *FastReverseProxy) ridString(req *fasthttp.Request) string {
+	return rp.RequestIDHeader + ":" + string(req.Header.Peek(rp.RequestIDHeader))
+}
+
 func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 	var backendDuration time.Duration
 	req := &ctx.Request
@@ -161,6 +165,13 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 	if host == "__ping__" && len(uri.Path()) == 1 && uri.Path()[0] == byte('/') {
 		resp.SetBody(okResponse)
 		return
+	}
+	if rp.RequestIDHeader != "" && len(req.Header.Peek(rp.RequestIDHeader)) == 0 {
+		var unparsedID *uuid.UUID
+		unparsedID, err := uuid.NewV4()
+		if err == nil {
+			req.Header.Set(rp.RequestIDHeader, unparsedID.String())
+		}
 	}
 	reqData, dstScheme, dstHost, err := rp.chooseBackend(host)
 	logEntry := func() *log.LogEntry {
@@ -189,7 +200,7 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 	req.Header.Del("X-Debug-Router")
 	if err != nil || dstHost == "" {
 		if err != nil {
-			log.LogError(reqData.String(), string(uri.Path()), err)
+			reqData.logError(string(uri.Path()), rp.ridString(req), err)
 		}
 		var status int
 		var body []byte
@@ -205,7 +216,7 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 		rp.debugHeaders(resp, reqData, isDebug)
 		endErr := rp.Router.EndRequest(reqData, false, logEntry)
 		if endErr != nil {
-			log.LogError(reqData.String(), string(uri.Path()), endErr)
+			reqData.logError(string(uri.Path()), rp.ridString(req), endErr)
 		}
 		return
 	}
@@ -214,15 +225,6 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 		resp.SkipResponse = true
 		rp.serveWebsocket(dstHost, reqData, ctx)
 		return
-	}
-	if rp.RequestIDHeader != "" && len(req.Header.Peek(rp.RequestIDHeader)) == 0 {
-		var unparsedID *uuid.UUID
-		unparsedID, err = uuid.NewV4()
-		if err == nil {
-			req.Header.Set(rp.RequestIDHeader, unparsedID.String())
-		} else {
-			log.LogError(reqData.String(), string(uri.Path()), fmt.Errorf("unable to generate request id: %s", err))
-		}
 	}
 	hostOnly, _, _ := net.SplitHostPort(dstHost)
 	if hostOnly == "" {
@@ -255,11 +257,11 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 			err = fmt.Errorf("%s *DEAD*", err)
 		}
 		resp.SetStatusCode(http.StatusServiceUnavailable)
-		log.LogError(reqData.String(), string(uri.Path()), err)
+		reqData.logError(string(uri.Path()), rp.ridString(req), err)
 	}
 	rp.debugHeaders(resp, reqData, isDebug)
 	endErr := rp.Router.EndRequest(reqData, markAsDead, logEntry)
 	if endErr != nil {
-		log.LogError(reqData.String(), string(uri.Path()), endErr)
+		reqData.logError(string(uri.Path()), rp.ridString(req), endErr)
 	}
 }

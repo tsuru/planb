@@ -102,17 +102,27 @@ func (rp *NativeReverseProxy) Stop() {
 	rp.server.Close()
 }
 
+func (rp *NativeReverseProxy) ridString(req *http.Request) string {
+	return rp.RequestIDHeader + ":" + req.Header.Get(rp.RequestIDHeader)
+}
+
 func (rp *NativeReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if req.Host == "__ping__" && req.URL.Path == "/" {
 		rw.WriteHeader(http.StatusOK)
 		rw.Write(okResponse)
 		return
 	}
+	if rp.RequestIDHeader != "" && req.Header.Get(rp.RequestIDHeader) == "" {
+		unparsedID, err := uuid.NewV4()
+		if err == nil {
+			req.Header.Set(rp.RequestIDHeader, unparsedID.String())
+		}
+	}
 	upgrade := req.Header.Get("Upgrade")
 	if upgrade != "" && strings.ToLower(upgrade) == "websocket" {
 		reqData, err := rp.serveWebsocket(rw, req)
 		if err != nil {
-			log.LogError(reqData.String(), req.URL.Path, err)
+			reqData.logError(req.URL.Path, rp.ridString(req), err)
 			http.Error(rw, "", http.StatusBadGateway)
 		}
 		return
@@ -167,11 +177,11 @@ func (rp *NativeReverseProxy) serveWebsocket(rw http.ResponseWriter, req *http.R
 }
 
 func (rp *NativeReverseProxy) RoundTrip(req *http.Request) (*http.Response, error) {
-	reqData, err := rp.Router.ChooseBackend(req.Host)
 	req.URL.Scheme = ""
 	req.URL.Host = ""
+	reqData, err := rp.Router.ChooseBackend(req.Host)
 	if err != nil {
-		log.LogError(reqData.String(), req.URL.Path, err)
+		reqData.logError(req.URL.Path, rp.ridString(req), err)
 		return rp.roundTripWithData(req, reqData, err), nil
 	}
 	u, err := url.Parse(reqData.Backend)
@@ -182,14 +192,6 @@ func (rp *NativeReverseProxy) RoundTrip(req *http.Request) (*http.Response, erro
 	if req.URL.Host == "" {
 		req.URL.Scheme = "http"
 		req.URL.Host = reqData.Backend
-	}
-	if rp.RequestIDHeader != "" && req.Header.Get(rp.RequestIDHeader) == "" {
-		unparsedID, err := uuid.NewV4()
-		if err == nil {
-			req.Header.Set(rp.RequestIDHeader, unparsedID.String())
-		} else {
-			log.LogError(reqData.String(), req.URL.Path, fmt.Errorf("unable to generate request id: %s", err))
-		}
 	}
 	return rp.roundTripWithData(req, reqData, nil), nil
 }
@@ -224,7 +226,7 @@ func (rp *NativeReverseProxy) doResponse(req *http.Request, reqData *RequestData
 	}
 	err := rp.Router.EndRequest(reqData, isDead, logEntry)
 	if err != nil {
-		log.LogError(reqData.String(), req.URL.Path, err)
+		reqData.logError(req.URL.Path, rp.ridString(req), err)
 	}
 	return rsp
 }
@@ -289,7 +291,7 @@ func (rp *NativeReverseProxy) roundTripWithData(req *http.Request, reqData *Requ
 		if markAsDead {
 			err = fmt.Errorf("%s *DEAD*", err)
 		}
-		log.LogError(reqData.String(), req.URL.Path, err)
+		reqData.logError(req.URL.Path, rp.ridString(req), err)
 		rsp = &http.Response{
 			StatusCode: http.StatusServiceUnavailable,
 			Body:       emptyResponseBody,
