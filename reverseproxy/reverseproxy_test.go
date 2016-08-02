@@ -717,13 +717,13 @@ func (s *S) TestRoundTripWebSocket(c *check.C) {
 	go rp.Listen()
 	defer rp.Stop()
 	dialWS := func() *websocket.Conn {
-		config, err := websocket.NewConfig("ws://myfrontend.com", "ws://localhost/")
-		c.Assert(err, check.IsNil)
+		config, dialErr := websocket.NewConfig("ws://myfrontend.com", "ws://localhost/")
+		c.Assert(dialErr, check.IsNil)
 		url, _ := url.Parse(fmt.Sprintf("http://%s/", addr))
-		client, err := net.Dial("tcp", url.Host)
-		c.Assert(err, check.IsNil)
-		conn, err := websocket.NewClient(config, client)
-		c.Assert(err, check.IsNil)
+		client, dialErr := net.Dial("tcp", url.Host)
+		c.Assert(dialErr, check.IsNil)
+		conn, dialErr := websocket.NewClient(config, client)
+		c.Assert(dialErr, check.IsNil)
 		return conn
 	}
 	msgBuf := make([]byte, 100)

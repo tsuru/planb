@@ -117,10 +117,7 @@ func (b *redisMonitor) reserve(host, backend string) bool {
 		tx.Set(key, b.hostID, 30*time.Second)
 		return nil
 	})
-	if err == redis.TxFailedErr {
-		return false
-	}
-	return true
+	return err != redis.TxFailedErr
 }
 
 func (b *redisMonitor) free(host, backend string) {
@@ -239,7 +236,7 @@ func (b *redisMonitor) check(host, backend string) bool {
 	}
 	if hcData.body != "" {
 		data, _ := ioutil.ReadAll(rsp.Body)
-		return strings.Index(string(data), hcData.body) != -1
+		return strings.Contains(string(data), hcData.body)
 	}
 	return true
 }

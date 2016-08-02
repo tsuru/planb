@@ -221,7 +221,7 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	upgrade := req.Header.Peek("Upgrade")
-	if len(upgrade) > 0 && bytes.Compare(bytes.ToLower(upgrade), websocketUpgrade) == 0 {
+	if len(upgrade) > 0 && bytes.Equal(bytes.ToLower(upgrade), websocketUpgrade) {
 		resp.SkipResponse = true
 		rp.serveWebsocket(dstHost, reqData, ctx)
 		return
