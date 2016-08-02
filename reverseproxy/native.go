@@ -218,7 +218,9 @@ func (rp *NativeReverseProxy) doResponse(req *http.Request, reqData *RequestData
 	rsp.Request = req
 	rsp.ProtoMajor = req.ProtoMajor
 	rsp.ProtoMinor = req.ProtoMinor
-	rsp.Header = http.Header{}
+	if rsp.Header == nil {
+		rsp.Header = http.Header{}
+	}
 	if isDebug {
 		rsp.Header.Set("X-Debug-Backend-Url", reqData.Backend)
 		rsp.Header.Set("X-Debug-Backend-Id", strconv.FormatUint(uint64(reqData.BackendIdx), 10))

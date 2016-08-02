@@ -92,6 +92,7 @@ func (s *S) TestRoundTrip(c *check.C) {
 	var receivedReq *http.Request
 	ts := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		receivedReq = req
+		rw.Header().Set("X-Some-Rsp-Header", "rspvalue")
 		rw.WriteHeader(200)
 		rw.Write([]byte("my result"))
 	}))
@@ -110,6 +111,7 @@ func (s *S) TestRoundTrip(c *check.C) {
 	c.Assert(err, check.IsNil)
 	defer rsp.Body.Close()
 	c.Assert(rsp.StatusCode, check.Equals, 200)
+	c.Assert(rsp.Header.Get("X-Some-Rsp-Header"), check.Equals, "rspvalue")
 	data, err := ioutil.ReadAll(rsp.Body)
 	c.Assert(err, check.IsNil)
 	c.Assert(string(data), check.Equals, "my result")
@@ -147,6 +149,63 @@ func (s *S) TestRoundTrip(c *check.C) {
 		RequestIDHeader: "X-RID",
 		StatusCode:      200,
 		ContentLength:   9,
+	})
+	c.Assert(router.resultIsDead, check.Equals, false)
+}
+
+func (s *S) TestRoundTripRedirect(c *check.C) {
+	var receivedReqs []*http.Request
+	ts := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		receivedReqs = append(receivedReqs, req)
+		if req.URL.Path == "/auth" {
+			rw.Write([]byte("redirected"))
+			return
+		}
+		http.Redirect(rw, req, "/auth", http.StatusFound)
+	}))
+	defer ts.Close()
+	router := &recoderRouter{dst: ts.URL}
+	rp := s.factory()
+	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router, RequestIDHeader: "X-RID"})
+	c.Assert(err, check.IsNil)
+	go rp.Listen()
+	defer rp.Stop()
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
+	c.Assert(err, check.IsNil)
+	req.Host = "myhost.com"
+	req.Header.Set("X-My-Header", "myvalue")
+	client := http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			req.Host = "myhost.com"
+			req.Header.Set("X-My-Header", "myvalue")
+			return nil
+		},
+	}
+	rsp, err := client.Do(req)
+	c.Assert(err, check.IsNil)
+	defer rsp.Body.Close()
+	c.Assert(rsp.StatusCode, check.Equals, http.StatusOK)
+	data, err := ioutil.ReadAll(rsp.Body)
+	c.Assert(err, check.IsNil)
+	c.Assert(string(data), check.Equals, "redirected")
+	c.Assert(receivedReqs, check.HasLen, 2)
+	c.Assert(receivedReqs[0].Host, check.Equals, "myhost.com")
+	c.Assert(receivedReqs[0].Header.Get("X-My-Header"), check.Equals, "myvalue")
+	c.Assert(receivedReqs[0].Header.Get("X-Host"), check.Equals, "")
+	c.Assert(receivedReqs[0].Header.Get("X-Forwarded-Host"), check.Equals, "")
+	c.Assert(receivedReqs[0].Header.Get("X-RID"), check.Not(check.Equals), "")
+	c.Assert(receivedReqs[1].Host, check.Equals, "myhost.com")
+	c.Assert(receivedReqs[1].Header.Get("X-My-Header"), check.Equals, "myvalue")
+	c.Assert(receivedReqs[1].Header.Get("X-Host"), check.Equals, "")
+	c.Assert(receivedReqs[1].Header.Get("X-Forwarded-Host"), check.Equals, "")
+	c.Assert(receivedReqs[1].Header.Get("X-RID"), check.Not(check.Equals), "")
+	c.Assert(router.resultHost, check.Equals, "myhost.com")
+	c.Assert(router.resultReqData, check.DeepEquals, &RequestData{
+		Backend:    ts.URL,
+		BackendIdx: 0,
+		BackendKey: "myhost.com",
+		BackendLen: 1,
+		Host:       "myhost.com",
 	})
 	c.Assert(router.resultIsDead, check.Equals, false)
 }
@@ -373,6 +432,25 @@ func (s *S) TestRoundTripDebugHeaders(c *check.C) {
 	c.Assert(rsp.Header.Get("X-Debug-Backend-Id"), check.Equals, "0")
 	c.Assert(rsp.Header.Get("X-Debug-Frontend-Key"), check.Equals, "myhost.com")
 	c.Assert(receivedReq.Header.Get("X-Debug-Router"), check.Equals, "")
+}
+
+func (s *S) TestRoundTripNoRouteDebugHeaders(c *check.C) {
+	router := &recoderRouter{dst: ""}
+	rp := s.factory()
+	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router})
+	c.Assert(err, check.IsNil)
+	go rp.Listen()
+	defer rp.Stop()
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
+	c.Assert(err, check.IsNil)
+	req.Host = "myhost.com"
+	req.Header.Set("X-Debug-Router", "1")
+	rsp, err := http.DefaultClient.Do(req)
+	c.Assert(err, check.IsNil)
+	c.Assert(rsp.StatusCode, check.Equals, http.StatusBadRequest)
+	data, err := ioutil.ReadAll(rsp.Body)
+	c.Assert(err, check.IsNil)
+	c.Assert(data, check.DeepEquals, noRouteResponseBody.value)
 }
 
 func (s *S) TestRoundTripNoRoute(c *check.C) {
