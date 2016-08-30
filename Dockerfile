@@ -4,4 +4,5 @@
 
 FROM alpine:3.2
 ADD planb /bin/planb
+EXPOSE 8080
 ENTRYPOINT ["/bin/planb"]
