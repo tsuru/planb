@@ -15,10 +15,13 @@ import (
 	"github.com/tsuru/planb/reverseproxy"
 )
 
+var cacheTTLExpires = 2 * time.Second
+
 type Router struct {
 	LogPath        string
 	DeadBackendTTL int
 	Backend        backend.RoutesBackend
+	CacheEnabled   bool
 	logger         *log.Logger
 	rrMutex        sync.RWMutex
 	roundRobin     map[string]*int32
@@ -58,7 +61,7 @@ func (router *Router) Init() error {
 	if router.DeadBackendTTL == 0 {
 		router.DeadBackendTTL = 30
 	}
-	if router.cache == nil {
+	if router.CacheEnabled && router.cache == nil {
 		router.cache, err = lru.New(100)
 		if err != nil {
 			return err
@@ -134,10 +137,12 @@ func (router *Router) Stop() {
 }
 
 func (router *Router) getBackends(host string) (*backendSet, error) {
-	if data, ok := router.cache.Get(host); ok {
-		set := data.(backendSet)
-		if !set.Expired() {
-			return &set, nil
+	if router.cache != nil {
+		if data, ok := router.cache.Get(host); ok {
+			set := data.(backendSet)
+			if !set.Expired() {
+				return &set, nil
+			}
 		}
 	}
 	var set backendSet
@@ -149,7 +154,9 @@ func (router *Router) getBackends(host string) (*backendSet, error) {
 		}
 		return nil, err
 	}
-	set.expires = time.Now().Add(2 * time.Second)
-	router.cache.Add(host, set)
+	set.expires = time.Now().Add(cacheTTLExpires)
+	if router.cache != nil {
+		router.cache.Add(host, set)
+	}
 	return &set, nil
 }

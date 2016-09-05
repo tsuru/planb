@@ -100,6 +100,7 @@ func runServer(c *cli.Context) {
 		Backend:        routesBE,
 		LogPath:        c.String("access-log"),
 		DeadBackendTTL: c.Int("dead-backend-time"),
+		CacheEnabled:   c.Bool("backend-cache"),
 	}
 	err = r.Init()
 	if err != nil {
@@ -230,6 +231,10 @@ The value 'none' can be used to disable access logs.`),
 			Name:  "engine",
 			Value: "native",
 			Usage: fixUsage("Reverse proxy engine, options are 'native' and 'fasthttp'"),
+		},
+		cli.BoolFlag{
+			Name:  "backend-cache",
+			Usage: "Enable caching backend results for 2 seconds. This may cause temporary inconsistencies.",
 		},
 	}
 	app.Version = "0.1.7"

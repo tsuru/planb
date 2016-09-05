@@ -56,6 +56,16 @@ func (s *S) TestInit(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(router.roundRobin, check.DeepEquals, map[string]*int32{})
 	c.Assert(router.logger, check.IsNil)
+	c.Assert(router.cache, check.IsNil)
+	c.Assert(router.Backend, check.NotNil)
+}
+
+func (s *S) TestInitCacheEnabled(c *check.C) {
+	router := Router{CacheEnabled: true}
+	err := router.Init()
+	c.Assert(err, check.IsNil)
+	c.Assert(router.roundRobin, check.DeepEquals, map[string]*int32{})
+	c.Assert(router.logger, check.IsNil)
 	c.Assert(router.cache, check.NotNil)
 	c.Assert(router.Backend, check.NotNil)
 }
@@ -153,39 +163,55 @@ func (s *S) TestChooseBackendRoundRobin(c *check.C) {
 		BackendLen: 3,
 		Host:       "myfrontend.com",
 	})
+	err = s.redis.RPush("frontend:myfrontend.com", "http://url4:123").Err()
+	c.Assert(err, check.IsNil)
 	reqData, err = router.ChooseBackend("myfrontend.com")
 	c.Assert(err, check.IsNil)
 	c.Assert(reqData.Backend, check.Equals, "http://url2:123")
 	reqData, err = router.ChooseBackend("myfrontend.com")
 	c.Assert(err, check.IsNil)
 	c.Assert(reqData.Backend, check.Equals, "http://url3:123")
+	reqData, err = router.ChooseBackend("myfrontend.com")
+	c.Assert(err, check.IsNil)
+	c.Assert(reqData.Backend, check.Equals, "http://url4:123")
 	reqData, err = router.ChooseBackend("myfrontend.com")
 	c.Assert(err, check.IsNil)
 	c.Assert(reqData.Backend, check.Equals, "http://url1:123")
 }
 
-func (s *S) TestChooseBackendRoundRobinNoCache(c *check.C) {
-	router := Router{}
+func (s *S) TestChooseBackendRoundRobinWithCache(c *check.C) {
+	router := Router{CacheEnabled: true}
 	err := router.Init()
 	c.Assert(err, check.IsNil)
 	err = s.redis.RPush("frontend:myfrontend.com", "myfrontend", "http://url1:123", "http://url2:123", "http://url3:123").Err()
 	c.Assert(err, check.IsNil)
-	router.cache.Purge()
 	reqData, err := router.ChooseBackend("myfrontend.com")
 	c.Assert(err, check.IsNil)
 	c.Assert(reqData.Backend, check.Equals, "http://url1:123")
-	router.cache.Purge()
+	err = s.redis.RPush("frontend:myfrontend.com", "http://url4:123").Err()
+	c.Assert(err, check.IsNil)
 	reqData, err = router.ChooseBackend("myfrontend.com")
 	c.Assert(err, check.IsNil)
 	c.Assert(reqData.Backend, check.Equals, "http://url2:123")
-	router.cache.Purge()
 	reqData, err = router.ChooseBackend("myfrontend.com")
 	c.Assert(err, check.IsNil)
 	c.Assert(reqData.Backend, check.Equals, "http://url3:123")
-	router.cache.Purge()
 	reqData, err = router.ChooseBackend("myfrontend.com")
 	c.Assert(err, check.IsNil)
 	c.Assert(reqData.Backend, check.Equals, "http://url1:123")
+	time.Sleep(cacheTTLExpires)
+	reqData, err = router.ChooseBackend("myfrontend.com")
+	c.Assert(err, check.IsNil)
+	c.Assert(reqData.Backend, check.Equals, "http://url1:123")
+	reqData, err = router.ChooseBackend("myfrontend.com")
+	c.Assert(err, check.IsNil)
+	c.Assert(reqData.Backend, check.Equals, "http://url2:123")
+	reqData, err = router.ChooseBackend("myfrontend.com")
+	c.Assert(err, check.IsNil)
+	c.Assert(reqData.Backend, check.Equals, "http://url3:123")
+	reqData, err = router.ChooseBackend("myfrontend.com")
+	c.Assert(err, check.IsNil)
+	c.Assert(reqData.Backend, check.Equals, "http://url4:123")
 }
 
 type bufferCloser struct {
