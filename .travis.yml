@@ -4,6 +4,8 @@ go:
   - 1.6.3
   - tip
 env:
+  global:
+    - GO_FOR_RELEASE=1.7
   matrix:
     - GOARCH=amd64
 install:
