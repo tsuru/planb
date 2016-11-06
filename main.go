@@ -35,29 +35,31 @@ func handleSignals(server interface {
 				pprof.Lookup("goroutine").WriteTo(os.Stdout, 2)
 			}
 			if sig == syscall.SIGUSR2 {
-				go func() {
-					cpufile, _ := os.OpenFile("./planb_cpu.pprof", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
-					memfile, _ := os.OpenFile("./planb_mem.pprof", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
-					lockfile, _ := os.OpenFile("./planb_lock.pprof", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
-					log.Println("enabling profile...")
-					runtime.GC()
-					pprof.WriteHeapProfile(memfile)
-					memfile.Close()
-					runtime.SetBlockProfileRate(1)
-					time.Sleep(30 * time.Second)
-					pprof.Lookup("block").WriteTo(lockfile, 0)
-					runtime.SetBlockProfileRate(0)
-					lockfile.Close()
-					pprof.StartCPUProfile(cpufile)
-					time.Sleep(30 * time.Second)
-					pprof.StopCPUProfile()
-					cpufile.Close()
-					log.Println("profiling done")
-				}()
+				go startProfiling()
 			}
 		}
 	}()
 	signal.Notify(sigChan, os.Interrupt, os.Kill, syscall.SIGUSR1, syscall.SIGUSR2)
+}
+
+func startProfiling() {
+	cpufile, _ := os.OpenFile("./planb_cpu.pprof", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
+	memfile, _ := os.OpenFile("./planb_mem.pprof", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
+	lockfile, _ := os.OpenFile("./planb_lock.pprof", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0660)
+	log.Println("enabling profile...")
+	runtime.GC()
+	pprof.WriteHeapProfile(memfile)
+	memfile.Close()
+	runtime.SetBlockProfileRate(1)
+	time.Sleep(30 * time.Second)
+	pprof.Lookup("block").WriteTo(lockfile, 0)
+	runtime.SetBlockProfileRate(0)
+	lockfile.Close()
+	pprof.StartCPUProfile(cpufile)
+	time.Sleep(30 * time.Second)
+	pprof.StopCPUProfile()
+	cpufile.Close()
+	log.Println("profiling done")
 }
 
 func runServer(c *cli.Context) {
