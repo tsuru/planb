@@ -69,37 +69,39 @@ func (b *redisMonitor) start() error {
 	if err != nil {
 		return err
 	}
-	go func() {
-		wg := sync.WaitGroup{}
-		defer close(b.done)
-		defer wg.Wait()
-		defer pubsub.Close()
-		msgCh := make(chan string)
-		for {
-			go func() {
-				msg, _ := pubsub.ReceiveMessage()
-				if msg == nil {
-					msgCh <- ""
-				} else {
-					msgCh <- msg.Payload
-				}
-			}()
-			select {
-			case <-b.quit:
-				return
-			case msg := <-msgCh:
-				if msg == "" {
-					continue
-				}
-				wg.Add(1)
-				go func(msg string) {
-					defer wg.Done()
-					b.watch(msg)
-				}(msg)
-			}
-		}
-	}()
+	go b.loop(pubsub)
 	return nil
+}
+
+func (b *redisMonitor) loop(pubsub *redis.PubSub) {
+	wg := sync.WaitGroup{}
+	defer close(b.done)
+	defer wg.Wait()
+	defer pubsub.Close()
+	msgCh := make(chan string)
+	for {
+		go func() {
+			msg, _ := pubsub.ReceiveMessage()
+			if msg == nil {
+				msgCh <- ""
+			} else {
+				msgCh <- msg.Payload
+			}
+		}()
+		select {
+		case <-b.quit:
+			return
+		case msg := <-msgCh:
+			if msg == "" {
+				continue
+			}
+			wg.Add(1)
+			go func(msg string) {
+				defer wg.Done()
+				b.watch(msg)
+			}(msg)
+		}
+	}
 }
 
 func (b *redisMonitor) reserve(host, backend string) bool {
