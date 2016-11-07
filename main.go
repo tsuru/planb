@@ -5,6 +5,7 @@
 package main
 
 import (
+	stdtls "crypto/tls"
 	"errors"
 	"log"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -21,6 +23,7 @@ import (
 	"github.com/tsuru/planb/backend"
 	"github.com/tsuru/planb/reverseproxy"
 	"github.com/tsuru/planb/router"
+	"github.com/tsuru/planb/tls"
 )
 
 func handleSignals(server interface {
@@ -120,12 +123,48 @@ func runServer(c *cli.Context) {
 		log.Fatal(err)
 	}
 	handleSignals(rp)
-	listener, err := net.Listen("tcp", c.String("listen"))
-	if err != nil {
-		log.Fatal(err)
+
+	var wg sync.WaitGroup
+	listen := c.String("listen")
+
+	if listen != "disabled" {
+		wg.Add(1)
+		go func() {
+			listener, err := net.Listen("tcp", listen)
+			defer listener.Close()
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Printf("Listening on %s...\n", listener.Addr().String())
+			rp.Listen(listener)
+			listener.Close()
+			wg.Done()
+		}()
 	}
-	log.Printf("Listening on %s...\n", listener.Addr().String())
-	rp.Listen(listener)
+
+	tlsListen := c.String("tls-listen")
+	if tlsListen != "" {
+		wg.Add(1)
+		go func() {
+			client, err := readOpts.Client()
+			if err != nil {
+				log.Fatal(err)
+			}
+			certLoader := tls.NewRedisCertificateLoader(client)
+			tlsConfig := &stdtls.Config{GetCertificate: certLoader.GetCertificate}
+
+			listener, err := net.Listen("tcp", tlsListen)
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Printf("Listening tls on %s...\n", listener.Addr().String())
+			rp.Listen(stdtls.NewListener(listener, tlsConfig))
+			listener.Close()
+			wg.Done()
+		}()
+	}
+
+	wg.Wait()
 	r.Stop()
 	routesBE.StopMonitor()
 }
@@ -156,6 +195,16 @@ func main() {
 			Name:  "listen, l",
 			Value: "0.0.0.0:8989",
 			Usage: "Address to listen",
+		},
+		cli.StringFlag{
+			Name:  "tls-listen",
+			Usage: "Address to listen with tls",
+		},
+		cli.StringFlag{
+			Name:  "load-certificates-from",
+			Value: "redis",
+			Usage: fixUsage(`Path where certificate will found.
+If value equals 'redis' certificate will be loaded from redis service.`),
 		},
 		cli.StringFlag{
 			Name:  "read-redis-host",
