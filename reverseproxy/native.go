@@ -34,10 +34,9 @@ var (
 type NativeReverseProxy struct {
 	http.Transport
 	ReverseProxyConfig
-	server   *manners.GracefulServer
-	rp       *httputil.ReverseProxy
-	dialer   *net.Dialer
-	listener net.Listener
+	server *manners.GracefulServer
+	rp     *httputil.ReverseProxy
+	dialer *net.Dialer
 }
 
 type fixedReadCloser struct {
@@ -68,13 +67,8 @@ func (p *bufferPool) Put(b []byte) {
 	p.syncPool.Put(b)
 }
 
-func (rp *NativeReverseProxy) Initialize(rpConfig ReverseProxyConfig) (string, error) {
-	var err error
+func (rp *NativeReverseProxy) Initialize(rpConfig ReverseProxyConfig) error {
 	rp.ReverseProxyConfig = rpConfig
-	rp.listener, err = net.Listen("tcp", rpConfig.Listen)
-	if err != nil {
-		return "", err
-	}
 	rp.server = manners.NewWithServer(&http.Server{Handler: rp})
 	rp.dialer = &net.Dialer{
 		Timeout:   rp.DialTimeout,
@@ -91,11 +85,11 @@ func (rp *NativeReverseProxy) Initialize(rpConfig ReverseProxyConfig) (string, e
 		FlushInterval: rp.FlushInterval,
 		BufferPool:    &bufferPool{},
 	}
-	return rp.listener.Addr().String(), nil
+	return nil
 }
 
-func (rp *NativeReverseProxy) Listen() {
-	rp.server.Serve(rp.listener)
+func (rp *NativeReverseProxy) Listen(listener net.Listener) {
+	rp.server.Serve(listener)
 }
 
 func (rp *NativeReverseProxy) Stop() {

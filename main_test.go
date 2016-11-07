@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -116,14 +117,17 @@ func (s *S) TestServeHTTPStressAllLeakDetector(c *check.C) {
 	err = r.Init()
 	c.Assert(err, check.IsNil)
 	var nativeRP reverseproxy.ReverseProxy = &reverseproxy.NativeReverseProxy{}
-	addr, err := nativeRP.Initialize(reverseproxy.ReverseProxyConfig{
-		Listen:      ":0",
+	err = nativeRP.Initialize(reverseproxy.ReverseProxyConfig{
 		Router:      &r,
 		DialTimeout: time.Second,
 	})
 	c.Assert(err, check.IsNil)
-	go nativeRP.Listen()
+	listener, err := net.Listen("tcp", ":0")
+	c.Assert(err, check.IsNil)
+	addr := listener.Addr().String()
+	go nativeRP.Listen(listener)
 	defer nativeRP.Stop()
+	defer listener.Close()
 	nClients := 4
 	rec := make(chan string, 1000)
 	wg := sync.WaitGroup{}

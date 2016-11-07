@@ -7,6 +7,7 @@ package main
 import (
 	"errors"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"regexp"
@@ -108,8 +109,7 @@ func runServer(c *cli.Context) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	addr, err := rp.Initialize(reverseproxy.ReverseProxyConfig{
-		Listen:          c.String("listen"),
+	err = rp.Initialize(reverseproxy.ReverseProxyConfig{
 		Router:          &r,
 		RequestIDHeader: c.String("request-id-header"),
 		FlushInterval:   time.Duration(c.Int("flush-interval")) * time.Millisecond,
@@ -120,8 +120,12 @@ func runServer(c *cli.Context) {
 		log.Fatal(err)
 	}
 	handleSignals(rp)
-	log.Printf("Listening on %s...\n", addr)
-	rp.Listen()
+	listener, err := net.Listen("tcp", c.String("listen"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Listening on %s...\n", listener.Addr().String())
+	rp.Listen(listener)
 	r.Stop()
 	routesBE.StopMonitor()
 }

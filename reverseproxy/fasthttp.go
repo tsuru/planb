@@ -23,7 +23,6 @@ import (
 
 type FastReverseProxy struct {
 	ReverseProxyConfig
-	listener  net.Listener
 	server    *fasthttp.Server
 	dialFunc  func(addr string) (net.Conn, error)
 	mu        sync.Mutex
@@ -36,27 +35,22 @@ func dialWithTimeout(t time.Duration) func(string) (net.Conn, error) {
 	}
 }
 
-func (rp *FastReverseProxy) Initialize(rpConfig ReverseProxyConfig) (string, error) {
+func (rp *FastReverseProxy) Initialize(rpConfig ReverseProxyConfig) error {
 	rp.ReverseProxyConfig = rpConfig
-	var err error
-	rp.listener, err = net.Listen("tcp", rpConfig.Listen)
-	if err != nil {
-		return "", err
-	}
 	rp.server = &fasthttp.Server{
 		Handler: rp.handler,
 	}
 	rp.dialFunc = dialWithTimeout(rp.DialTimeout)
 	rp.clientMap = make(map[string]*fasthttp.HostClient)
-	return rp.listener.Addr().String(), nil
+	return nil
 }
 
-func (rp *FastReverseProxy) Listen() {
-	rp.server.Serve(rp.listener)
+func (rp *FastReverseProxy) Listen(listener net.Listener) {
+	rp.server.Serve(listener)
 }
 
 func (rp *FastReverseProxy) Stop() {
-	rp.listener.Close()
+	// no special treatment for fast reverse proxy
 }
 
 func (rp *FastReverseProxy) getClient(addr string, tls bool) *fasthttp.HostClient {

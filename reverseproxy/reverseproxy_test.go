@@ -82,6 +82,14 @@ func Test(t *testing.T) {
 	check.TestingT(t)
 }
 
+func getFreeListener() (string, net.Listener) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		stdlog.Fatal(err)
+	}
+	return listener.Addr().String(), listener
+}
+
 func (s *S) SetUpTest(c *check.C) {
 	c.Logf("testing %T", s.factory())
 	s.logBuffer = bytes.NewBuffer(nil)
@@ -99,10 +107,12 @@ func (s *S) TestRoundTrip(c *check.C) {
 	defer ts.Close()
 	router := &recoderRouter{dst: ts.URL}
 	rp := s.factory()
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router, RequestIDHeader: "X-RID"})
+	err := rp.Initialize(ReverseProxyConfig{Router: router, RequestIDHeader: "X-RID"})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
 	req.Host = "myhost.com"
@@ -166,10 +176,12 @@ func (s *S) TestRoundTripRedirect(c *check.C) {
 	defer ts.Close()
 	router := &recoderRouter{dst: ts.URL}
 	rp := s.factory()
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router, RequestIDHeader: "X-RID"})
+	err := rp.Initialize(ReverseProxyConfig{Router: router, RequestIDHeader: "X-RID"})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
 	req.Host = "myhost.com"
@@ -220,10 +232,12 @@ func (s *S) TestRoundTripWithExistingRequestID(c *check.C) {
 	defer ts.Close()
 	router := &recoderRouter{dst: ts.URL}
 	rp := s.factory()
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router, RequestIDHeader: "X-RID"})
+	err := rp.Initialize(ReverseProxyConfig{Router: router, RequestIDHeader: "X-RID"})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
 	req.Host = "myhost.com"
@@ -257,10 +271,12 @@ func (s *S) TestRoundTripHostDestination(c *check.C) {
 	c.Assert(port, check.Not(check.Equals), "")
 	router := &recoderRouter{dst: fmt.Sprintf("http://localhost:%s", port)}
 	rp := s.factory()
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router})
+	err = rp.Initialize(ReverseProxyConfig{Router: router})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
 	req.Host = "myhost.com"
@@ -290,9 +306,10 @@ func (s *S) TestRoundTripHostDestination(c *check.C) {
 func (s *S) TestRoundTripWithError(c *check.C) {
 	router := &recoderRouter{dst: "http://127.0.0.1:23771"}
 	rp := s.factory()
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router})
+	err := rp.Initialize(ReverseProxyConfig{Router: router})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
@@ -319,10 +336,12 @@ func (s *S) TestRoundTripWithError(c *check.C) {
 func (s *S) TestRoundTripWithErrNoRegisteredBackends(c *check.C) {
 	router := &recoderRouter{errChoose: ErrNoRegisteredBackends}
 	rp := s.factory()
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router, RequestIDHeader: "RID"})
+	err := rp.Initialize(ReverseProxyConfig{Router: router, RequestIDHeader: "RID"})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
 	req.Host = "myhost.com"
@@ -349,10 +368,12 @@ func (s *S) TestRoundTripWithErrNoRegisteredBackends(c *check.C) {
 func (s *S) TestRoundTripWithErrAllBackendsDead(c *check.C) {
 	router := &recoderRouter{errChoose: ErrAllBackendsDead}
 	rp := s.factory()
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router, RequestIDHeader: "RID"})
+	err := rp.Initialize(ReverseProxyConfig{Router: router, RequestIDHeader: "RID"})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
 	req.Host = "myhost.com"
@@ -379,10 +400,12 @@ func (s *S) TestRoundTripWithErrAllBackendsDead(c *check.C) {
 func (s *S) TestRoundTripWithErrOther(c *check.C) {
 	router := &recoderRouter{errChoose: errors.New("other error")}
 	rp := s.factory()
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router, RequestIDHeader: "RID"})
+	err := rp.Initialize(ReverseProxyConfig{Router: router, RequestIDHeader: "RID"})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
 	req.Host = "myhost.com"
@@ -416,10 +439,12 @@ func (s *S) TestRoundTripDebugHeaders(c *check.C) {
 	defer ts.Close()
 	router := &recoderRouter{dst: ts.URL}
 	rp := s.factory()
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router})
+	err := rp.Initialize(ReverseProxyConfig{Router: router})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
 	req.Host = "myhost.com"
@@ -437,10 +462,12 @@ func (s *S) TestRoundTripDebugHeaders(c *check.C) {
 func (s *S) TestRoundTripNoRouteDebugHeaders(c *check.C) {
 	router := &recoderRouter{dst: ""}
 	rp := s.factory()
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router})
+	err := rp.Initialize(ReverseProxyConfig{Router: router})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
 	req.Host = "myhost.com"
@@ -456,10 +483,12 @@ func (s *S) TestRoundTripNoRouteDebugHeaders(c *check.C) {
 func (s *S) TestRoundTripNoRoute(c *check.C) {
 	router := &recoderRouter{dst: ""}
 	rp := s.factory()
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router})
+	err := rp.Initialize(ReverseProxyConfig{Router: router})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
 	req.Host = "myhost.com"
@@ -479,10 +508,12 @@ func (s *S) TestRoundTripStress(c *check.C) {
 	defer ts.Close()
 	router := &noopRouter{dst: ts.URL}
 	rp := s.factory()
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router})
+	err := rp.Initialize(ReverseProxyConfig{Router: router})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	u := fmt.Sprintf("http://%s/", addr)
 	wg := sync.WaitGroup{}
 	nConnections := 50
@@ -514,10 +545,12 @@ func (s *S) TestRoundTripStress(c *check.C) {
 func (s *S) TestRoundTripStressWithTimeoutBackend(c *check.C) {
 	router := &noopRouter{dst: "http://127.0.0.1:23771"}
 	rp := s.factory()
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router})
+	err := rp.Initialize(ReverseProxyConfig{Router: router})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	u := fmt.Sprintf("http://%s/", addr)
 	wg := sync.WaitGroup{}
 	nConnections := 50
@@ -549,10 +582,12 @@ func (s *S) TestRoundTripStressWithTimeoutBackend(c *check.C) {
 func (s *S) TestRoundTripPing(c *check.C) {
 	rp := s.factory()
 	router := &noopRouter{}
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router})
+	err := rp.Initialize(ReverseProxyConfig{Router: router})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
 	req.Host = "__ping__"
@@ -586,14 +621,15 @@ func (s *S) TestRoundTripStreamingRequest(c *check.C) {
 	defer ts.Close()
 	router := &recoderRouter{dst: ts.URL}
 
-	addr, err := rp.Initialize(ReverseProxyConfig{
-		Listen:        "127.0.0.1:0",
+	err := rp.Initialize(ReverseProxyConfig{
 		Router:        router,
 		FlushInterval: 100 * time.Millisecond,
 	})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	defer close(msgCh)
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
@@ -653,10 +689,12 @@ func (s *S) TestRoundTripTimeout(c *check.C) {
 	defer ts.Close()
 	defer close(blk)
 	router := &recoderRouter{dst: ts.URL}
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router, RequestTimeout: time.Second, RequestIDHeader: "RID"})
+	err := rp.Initialize(ReverseProxyConfig{Router: router, RequestTimeout: time.Second, RequestIDHeader: "RID"})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
 	req.Host = "myhost.com"
@@ -671,15 +709,17 @@ func (s *S) TestRoundTripTimeout(c *check.C) {
 
 func (s *S) TestRoundTripTimeoutDial(c *check.C) {
 	rp := s.factory()
-	if fmt.Sprintf("%T", rp) == "*reverseproxy.FastReverseProxy" {
+	if _, ok := rp.(*FastReverseProxy); ok {
 		c.Skip("fasthttp is not handling timeouts correctly")
 	}
 	// Reserved TEST-NET IP should cause
 	router := &recoderRouter{dst: "http://192.0.2.1:49151"}
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router, DialTimeout: time.Second, RequestTimeout: 10 * time.Second, RequestIDHeader: "RID"})
+	err := rp.Initialize(ReverseProxyConfig{Router: router, DialTimeout: time.Second, RequestTimeout: 10 * time.Second, RequestIDHeader: "RID"})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
 	c.Assert(err, check.IsNil)
 	req.Host = "myhost.com"
@@ -712,10 +752,12 @@ func (s *S) TestRoundTripWebSocket(c *check.C) {
 	}))
 	defer srv.Close()
 	router := &recoderRouter{dst: srv.URL}
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: router, RequestIDHeader: "RID"})
+	err := rp.Initialize(ReverseProxyConfig{Router: router, RequestIDHeader: "RID"})
 	c.Assert(err, check.IsNil)
-	go rp.Listen()
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	dialWS := func() *websocket.Conn {
 		config, dialErr := websocket.NewConfig("ws://myfrontend.com", "ws://localhost/")
 		c.Assert(dialErr, check.IsNil)
@@ -760,12 +802,13 @@ func baseBenchmarkServeHTTP(rp ReverseProxy, b *testing.B) {
 		rw.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: &noopRouter{dst: srv.URL}})
+	err := rp.Initialize(ReverseProxyConfig{Router: &noopRouter{dst: srv.URL}})
 	if err != nil {
 		b.Fatal(err)
 	}
+	addr, listener := getFreeListener()
 	url := fmt.Sprintf("http://%s/", addr)
-	go rp.Listen()
+	go rp.Listen(listener)
 	defer rp.Stop()
 	b.ResetTimer()
 	cli := &http.Client{
@@ -788,13 +831,15 @@ func baseBenchmarkServeHTTP(rp ReverseProxy, b *testing.B) {
 }
 
 func baseBenchmarkServeHTTPInvalidFrontends(rp ReverseProxy, b *testing.B) {
-	addr, err := rp.Initialize(ReverseProxyConfig{Listen: "127.0.0.1:0", Router: &noopRouter{}})
+	addr, listener := getFreeListener()
+	err := rp.Initialize(ReverseProxyConfig{Router: &noopRouter{}})
 	if err != nil {
 		b.Fatal(err)
 	}
 	url := fmt.Sprintf("http://%s/", addr)
-	go rp.Listen()
+	go rp.Listen(listener)
 	defer rp.Stop()
+	defer listener.Close()
 	b.ResetTimer()
 	cli := &http.Client{
 		Transport: &http.Transport{
