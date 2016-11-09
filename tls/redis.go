@@ -6,7 +6,6 @@ package tls
 
 import (
 	"crypto/tls"
-	"fmt"
 	"time"
 
 	"github.com/hashicorp/golang-lru"
@@ -73,12 +72,4 @@ type certCached struct {
 
 func (c *certCached) Expired() bool {
 	return time.Now().After(c.expires)
-}
-
-type ErrCertificateNotFound struct {
-	ServerName string
-}
-
-func (e ErrCertificateNotFound) Error() string {
-	return fmt.Sprintf(`Certificate for "%s" not is found`, e.ServerName)
 }

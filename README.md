@@ -109,6 +109,19 @@ $ redis-cli lrange frontend:www.tsuru.io 0 -1
 ```
 $ redis-cli -x hmset tls:www.tsuru.io certificate < server.crt
 $ redis-cli -x hmset tls:www.tsuru.io key < server.key
+```
+
+### TLS Configuration using FS (optional)
+
+create directory with this structure
+```
+cd certficates
+ls
+*.domain-wildcard.com.key
+*.domain-wildcard.com.crt
+absolute-domain.key
+absolute-domain.crt
+```
 
 While the server is running, any of these steps can be
 re-run without messing up with the traffic.

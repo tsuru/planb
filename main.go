@@ -150,9 +150,16 @@ func runServer(c *cli.Context) {
 			if err != nil {
 				log.Fatal(err)
 			}
-			certLoader := tls.NewRedisCertificateLoader(client)
-			tlsConfig := &stdtls.Config{GetCertificate: certLoader.GetCertificate}
 
+			var certLoader tls.CertificateLoader
+			from := c.String("load-certificates-from")
+
+			if from == "redis" {
+				certLoader = tls.NewRedisCertificateLoader(client)
+			} else {
+				certLoader = tls.NewFSCertificateLoader(from)
+			}
+			tlsConfig := &stdtls.Config{GetCertificate: certLoader.GetCertificate}
 			listener, err := net.Listen("tcp", tlsListen)
 			if err != nil {
 				log.Fatal(err)
