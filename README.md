@@ -17,7 +17,9 @@ replacing Hipache's executable for PlanB.
 The following flags are available for configuring PlanB on start-up:
 
 - ``--listen/-l``: the address to which PlanB will bind. Default value is
-  ``0.0.0.0:8989``.
+  ``0.0.0.0:8989``, if you want to disable http access use `disable`.
+- ``tls-listen``: the address to which PlanB will bind with tls support.
+- ``load-certificates-from``: Path where certificate will found. If value equals 'redis' certificate will be loaded from redis service. Default value is ``redis``
 - ``--read-redis-host``: Redis host of the server which contains application
   addresses. Default value is ``localhost``.
 - ``--read-redis-port``: Redis port of the server which contains application
@@ -46,6 +48,7 @@ The following flags are available for configuring PlanB on start-up:
 * Dead Backend Detection
 * Dynamic Configuration
 * WebSocket
+* TLS
 
 ## Install
 
@@ -99,6 +102,28 @@ $ redis-cli lrange frontend:www.tsuru.io 0 -1
 1) "mywebsite"
 2) "http://192.168.0.42:80"
 3) "http://192.168.0.43:80"
+```
+
+### TLS Configuration using redis (optional)
+
+```
+$ redis-cli -x hmset tls:www.tsuru.io certificate < server.crt
+$ redis-cli -x hmset tls:www.tsuru.io key < server.key
+
+$ redis-cli -x hmset tls:*.tsuru.com certificate < wildcard.crt
+$ redis-cli -x hmset tls:*.tsuru.io key < wildcard.key
+```
+
+### TLS Configuration using FS (optional)
+
+create directory following this structure
+```
+cd certficates
+ls
+*.domain-wildcard.com.key
+*.domain-wildcard.com.crt
+absolute-domain.key
+absolute-domain.crt
 ```
 
 While the server is running, any of these steps can be

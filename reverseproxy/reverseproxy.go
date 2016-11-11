@@ -6,6 +6,7 @@ package reverseproxy
 
 import (
 	"errors"
+	"net"
 	"time"
 
 	"github.com/tsuru/planb/log"
@@ -26,13 +27,12 @@ type Router interface {
 }
 
 type ReverseProxy interface {
-	Initialize(rpConfig ReverseProxyConfig) (string, error)
-	Listen()
+	Initialize(rpConfig ReverseProxyConfig) error
+	Listen(net.Listener)
 	Stop()
 }
 
 type ReverseProxyConfig struct {
-	Listen          string
 	Router          Router
 	FlushInterval   time.Duration
 	DialTimeout     time.Duration

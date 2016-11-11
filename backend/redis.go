@@ -29,17 +29,7 @@ type RedisOptions struct {
 	DB            int
 }
 
-const (
-	dialTimeout  = time.Second
-	readTimeout  = time.Second
-	writeTimeout = time.Second
-	poolTimeout  = time.Second
-	poolSize     = 1000
-	idleTimeout  = time.Minute
-	maxRetries   = 1
-)
-
-func newClient(opts *RedisOptions) (*redis.Client, error) {
+func (opts RedisOptions) Client() (*redis.Client, error) {
 	if opts.SentinelAddrs == "" {
 		if opts.Host == "" {
 			opts.Host = "127.0.0.1"
@@ -85,8 +75,18 @@ func newClient(opts *RedisOptions) (*redis.Client, error) {
 	}), nil
 }
 
+const (
+	dialTimeout  = time.Second
+	readTimeout  = time.Second
+	writeTimeout = time.Second
+	poolTimeout  = time.Second
+	poolSize     = 1000
+	idleTimeout  = time.Minute
+	maxRetries   = 1
+)
+
 func NewRedisBackend(readOpts, writeOpts RedisOptions) (RoutesBackend, error) {
-	rClient, err := newClient(&readOpts)
+	rClient, err := readOpts.Client()
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func NewRedisBackend(readOpts, writeOpts RedisOptions) (RoutesBackend, error) {
 	if err != nil {
 		return nil, err
 	}
-	wClient, err := newClient(&writeOpts)
+	wClient, err := writeOpts.Client()
 	if err != nil {
 		return nil, err
 	}

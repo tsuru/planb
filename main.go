@@ -20,6 +20,7 @@ import (
 	"github.com/tsuru/planb/backend"
 	"github.com/tsuru/planb/reverseproxy"
 	"github.com/tsuru/planb/router"
+	"github.com/tsuru/planb/tls"
 )
 
 func handleSignals(server interface {
@@ -108,8 +109,7 @@ func runServer(c *cli.Context) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	addr, err := rp.Initialize(reverseproxy.ReverseProxyConfig{
-		Listen:          c.String("listen"),
+	err = rp.Initialize(reverseproxy.ReverseProxyConfig{
 		Router:          &r,
 		RequestIDHeader: c.String("request-id-header"),
 		FlushInterval:   time.Duration(c.Int("flush-interval")) * time.Millisecond,
@@ -119,11 +119,38 @@ func runServer(c *cli.Context) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	handleSignals(rp)
-	log.Printf("Listening on %s...\n", addr)
-	rp.Listen()
+
+	listener := &router.RouterListener{
+		ReverseProxy: rp,
+		Listen:       c.String("listen"),
+		TLSListen:    c.String("tls-listen"),
+		CertLoader:   getCertificateLoader(c, readOpts),
+	}
+
+	handleSignals(listener)
+	listener.Serve()
+
 	r.Stop()
 	routesBE.StopMonitor()
+}
+
+func getCertificateLoader(c *cli.Context, readOpts backend.RedisOptions) tls.CertificateLoader {
+	if c.String("tls-listen") == "" {
+		return nil
+	}
+
+	from := c.String("load-certificates-from")
+	switch from {
+	case "redis":
+		client, err := readOpts.Client()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		return tls.NewRedisCertificateLoader(client)
+	default:
+		return tls.NewFSCertificateLoader(from)
+	}
 }
 
 func fixUsage(s string) string {
@@ -152,6 +179,16 @@ func main() {
 			Name:  "listen, l",
 			Value: "0.0.0.0:8989",
 			Usage: "Address to listen",
+		},
+		cli.StringFlag{
+			Name:  "tls-listen",
+			Usage: "Address to listen with tls",
+		},
+		cli.StringFlag{
+			Name:  "load-certificates-from",
+			Value: "redis",
+			Usage: fixUsage(`Path where certificate will found.
+If value equals 'redis' certificate will be loaded from redis service.`),
 		},
 		cli.StringFlag{
 			Name:  "read-redis-host",
