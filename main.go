@@ -5,17 +5,14 @@
 package main
 
 import (
-	stdtls "crypto/tls"
 	"errors"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"regexp"
 	"runtime"
 	"runtime/pprof"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -122,58 +119,38 @@ func runServer(c *cli.Context) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	handleSignals(rp)
 
-	var wg sync.WaitGroup
-	listen := c.String("listen")
-
-	if listen != "disabled" {
-		wg.Add(1)
-		go func() {
-			listener, err := net.Listen("tcp", listen)
-			defer listener.Close()
-			if err != nil {
-				log.Fatal(err)
-			}
-			log.Printf("Listening on %s...\n", listener.Addr().String())
-			rp.Listen(listener)
-			listener.Close()
-			wg.Done()
-		}()
+	listener := &router.RouterListener{
+		ReverseProxy: rp,
+		Listen:       c.String("listen"),
+		TLSListen:    c.String("tls-listen"),
+		CertLoader:   getCertificateLoader(c, readOpts),
 	}
 
-	tlsListen := c.String("tls-listen")
-	if tlsListen != "" {
-		wg.Add(1)
-		go func() {
-			client, err := readOpts.Client()
-			if err != nil {
-				log.Fatal(err)
-			}
+	handleSignals(listener)
+	listener.Serve()
 
-			var certLoader tls.CertificateLoader
-			from := c.String("load-certificates-from")
-
-			if from == "redis" {
-				certLoader = tls.NewRedisCertificateLoader(client)
-			} else {
-				certLoader = tls.NewFSCertificateLoader(from)
-			}
-			tlsConfig := &stdtls.Config{GetCertificate: certLoader.GetCertificate}
-			listener, err := net.Listen("tcp", tlsListen)
-			if err != nil {
-				log.Fatal(err)
-			}
-			log.Printf("Listening tls on %s...\n", listener.Addr().String())
-			rp.Listen(stdtls.NewListener(listener, tlsConfig))
-			listener.Close()
-			wg.Done()
-		}()
-	}
-
-	wg.Wait()
 	r.Stop()
 	routesBE.StopMonitor()
+}
+
+func getCertificateLoader(c *cli.Context, readOpts backend.RedisOptions) tls.CertificateLoader {
+	if c.String("tls-listen") == "" {
+		return nil
+	}
+
+	from := c.String("load-certificates-from")
+	switch from {
+	case "redis":
+		client, err := readOpts.Client()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		return tls.NewRedisCertificateLoader(client)
+	default:
+		return tls.NewFSCertificateLoader(from)
+	}
 }
 
 func fixUsage(s string) string {
