@@ -18,8 +18,10 @@ The following flags are available for configuring PlanB on start-up:
 
 - ``--listen/-l``: the address to which PlanB will bind. Default value is
   ``0.0.0.0:8989``, if you want to disable http access use `disable`.
-- ``tls-listen``: the address to which PlanB will bind with tls support.
-- ``load-certificates-from``: Path where certificate will found. If value equals 'redis' certificate will be loaded from redis service. Default value is ``redis``
+- ``--tls-listen``: the address to which PlanB will bind with tls support.
+- ``--load-certificates-from``: Path where certificate will found. If value
+  equals 'redis' certificate will be loaded from redis service. Default value
+  is ``redis``.
 - ``--read-redis-host``: Redis host of the server which contains application
   addresses. Default value is ``localhost``.
 - ``--read-redis-port``: Redis port of the server which contains application
