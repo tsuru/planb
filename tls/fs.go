@@ -72,13 +72,3 @@ func (f *FSCertificateLoader) GetCertificate(clientHello *tls.ClientHelloInfo) (
 
 	return nil, ErrCertificateNotFound{clientHello.ServerName}
 }
-
-func getWildCard(domain string) string {
-	length := len(domain)
-	for i := 0; i < length; i++ {
-		if domain[i] == '.' {
-			return "*" + domain[i:length]
-		}
-	}
-	return domain
-}

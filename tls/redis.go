@@ -26,13 +26,23 @@ func NewRedisCertificateLoader(client *redis.Client) *RedisCertificateLoader {
 }
 
 func (r *RedisCertificateLoader) GetCertificate(clientHello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-	if data, ok := r.cache.Get(clientHello.ServerName); ok {
+	cert, err := r.getCertificateByCNAME(getWildCard(clientHello.ServerName))
+
+	if _, ok := err.(ErrCertificateNotFound); ok {
+		return r.getCertificateByCNAME(clientHello.ServerName)
+	}
+
+	return cert, err
+}
+
+func (r *RedisCertificateLoader) getCertificateByCNAME(serverName string) (*tls.Certificate, error) {
+	if data, ok := r.cache.Get(serverName); ok {
 		c := data.(certCached)
 		if !c.Expired() {
 			return c.cert, nil
 		}
 	}
-	return r.getCertificateFromRedis(clientHello.ServerName)
+	return r.getCertificateFromRedis(serverName)
 }
 
 func (r *RedisCertificateLoader) getCertificateFromRedis(serverName string) (*tls.Certificate, error) {

@@ -68,6 +68,17 @@ func (s *S) TestRedisCertificateFound(c *check.C) {
 	c.Assert(err, check.IsNil)
 }
 
+func (s *S) TestRedisWildcardCertificateFound(c *check.C) {
+	result, err := s.redisClient.HMSet("tls:*.tsuru.io", "certificate", rsaCertPEM, "key", rsaKeyPEM).Result()
+	c.Assert(err, check.IsNil)
+	c.Assert(result, check.Equals, "OK")
+	clientHello := &tls.ClientHelloInfo{
+		ServerName: "hello.tsuru.io",
+	}
+	_, err = s.be.GetCertificate(clientHello)
+	c.Assert(err, check.IsNil)
+}
+
 func (s *S) TestRedisCertificateCached(c *check.C) {
 	result, err := s.redisClient.HMSet("tls:certificate-cached.com", "certificate", rsaCertPEM, "key", rsaKeyPEM).Result()
 	c.Assert(err, check.IsNil)

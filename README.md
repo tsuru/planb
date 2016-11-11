@@ -109,11 +109,14 @@ $ redis-cli lrange frontend:www.tsuru.io 0 -1
 ```
 $ redis-cli -x hmset tls:www.tsuru.io certificate < server.crt
 $ redis-cli -x hmset tls:www.tsuru.io key < server.key
+
+$ redis-cli -x hmset tls:*.tsuru.com certificate < wildcard.crt
+$ redis-cli -x hmset tls:*.tsuru.io key < wildcard.key
 ```
 
 ### TLS Configuration using FS (optional)
 
-create directory with this structure
+create directory following this structure
 ```
 cd certficates
 ls
