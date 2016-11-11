@@ -279,7 +279,9 @@ func BenchmarkChooseBackend(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	router := Router{}
+	router := Router{
+		CacheEnabled: true,
+	}
 	err = router.Init()
 	if err != nil {
 		b.Fatal(err)
@@ -312,7 +314,6 @@ func BenchmarkChooseBackendNoCache(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			router.ChooseBackend("myfrontend.com")
-			router.cache.Purge()
 		}
 	})
 	b.StopTimer()
@@ -342,7 +343,6 @@ func BenchmarkChooseBackendManyNoCache(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			router.ChooseBackend("myfrontend.com")
-			router.cache.Purge()
 		}
 	})
 	b.StopTimer()
