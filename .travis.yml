@@ -2,11 +2,11 @@ language: go
 sudo: required
 go:
   - 1.6.3
-  - 1.7.1
+  - 1.7.3
   - tip
 env:
   global:
-    - GO_FOR_RELEASE=1.7.1
+    - GO_FOR_RELEASE=1.7.3
     - IMAGE_NAME=tsuru/planb
   matrix:
     - GOARCH=amd64
