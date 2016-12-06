@@ -34,9 +34,9 @@ var (
 type NativeReverseProxy struct {
 	http.Transport
 	ReverseProxyConfig
-	server *manners.GracefulServer
-	rp     *httputil.ReverseProxy
-	dialer *net.Dialer
+	servers []*manners.GracefulServer
+	rp      *httputil.ReverseProxy
+	dialer  *net.Dialer
 }
 
 type fixedReadCloser struct {
@@ -69,7 +69,8 @@ func (p *bufferPool) Put(b []byte) {
 
 func (rp *NativeReverseProxy) Initialize(rpConfig ReverseProxyConfig) error {
 	rp.ReverseProxyConfig = rpConfig
-	rp.server = manners.NewWithServer(&http.Server{Handler: rp})
+	rp.servers = make([]*manners.GracefulServer, 0)
+
 	rp.dialer = &net.Dialer{
 		Timeout:   rp.DialTimeout,
 		KeepAlive: 30 * time.Second,
@@ -89,11 +90,15 @@ func (rp *NativeReverseProxy) Initialize(rpConfig ReverseProxyConfig) error {
 }
 
 func (rp *NativeReverseProxy) Listen(listener net.Listener) {
-	rp.server.Serve(listener)
+	server := manners.NewWithServer(&http.Server{Handler: rp})
+	rp.servers = append(rp.servers, server)
+	server.Serve(listener)
 }
 
 func (rp *NativeReverseProxy) Stop() {
-	rp.server.Close()
+	for _, server := range rp.servers {
+		server.Close()
+	}
 }
 
 func (rp *NativeReverseProxy) ridString(req *http.Request) string {
