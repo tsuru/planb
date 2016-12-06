@@ -7,6 +7,7 @@ go:
 env:
   global:
     - GO_FOR_RELEASE=1.7.1
+    - IMAGE_NAME=tsuru/planb
   matrix:
     - GOARCH=amd64
 install:
@@ -15,7 +16,7 @@ script:
   - go test -short -race ./...
   - CGO_ENABLED=0 go build
 after_success:
-  - travis/docker_image.bash
+  - curl https://raw.githubusercontent.com/tsuru/push-to-docker/master/push.sh | bash
 services:
   - redis-server
   - docker
