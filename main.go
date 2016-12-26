@@ -7,6 +7,7 @@ package main
 import (
 	"errors"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"regexp"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/codegangsta/cli"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tsuru/planb/backend"
 	"github.com/tsuru/planb/reverseproxy"
 	"github.com/tsuru/planb/router"
@@ -127,6 +129,14 @@ func runServer(c *cli.Context) {
 		CertLoader:   getCertificateLoader(c, readOpts),
 	}
 
+	if addr := c.String("metrics-address"); addr != "" {
+		handler := http.NewServeMux()
+		handler.Handle("/metrics", promhttp.Handler())
+		go func() {
+			log.Fatal(http.ListenAndServe(addr, handler))
+		}()
+	}
+
 	handleSignals(listener)
 	listener.Serve()
 
@@ -183,6 +193,10 @@ func main() {
 		cli.StringFlag{
 			Name:  "tls-listen",
 			Usage: "Address to listen with tls",
+		},
+		cli.StringFlag{
+			Name:  "metrics-address",
+			Usage: "Address to expose prometheus /metrics",
 		},
 		cli.StringFlag{
 			Name:  "load-certificates-from",
