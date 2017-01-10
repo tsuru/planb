@@ -34,7 +34,7 @@ var (
 	openConnections = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace: "planb",
 		Subsystem: "reverseproxy",
-		Name:      "connections_open",
+		Name:      "connections_current_open",
 		Help:      "The current number of open connections.",
 	})
 
@@ -55,7 +55,7 @@ var (
 	backendResponse = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "planb",
 		Subsystem: "reverseproxy",
-		Name:      "backends_responses",
+		Name:      "backends_responses_total",
 		Help:      "The total backends responses by status code.",
 	}, []string{"status_code"})
 )
