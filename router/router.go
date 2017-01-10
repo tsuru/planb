@@ -10,12 +10,22 @@ import (
 	"time"
 
 	"github.com/hashicorp/golang-lru"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tsuru/planb/backend"
 	"github.com/tsuru/planb/log"
 	"github.com/tsuru/planb/reverseproxy"
 )
 
-var cacheTTLExpires = 2 * time.Second
+var (
+	cacheTTLExpires = 2 * time.Second
+
+	markedDeadCount = prometheus.NewCounter(prometheus.CounterOpts{
+		Namespace: "planb",
+		Subsystem: "router",
+		Name:      "backend_markdead_total",
+		Help:      "The total number of backend mark dead occurencies.",
+	})
+)
 
 type Router struct {
 	LogPath        string
@@ -33,6 +43,10 @@ type backendSet struct {
 	backends []string
 	dead     map[int]struct{}
 	expires  time.Time
+}
+
+func init() {
+	prometheus.MustRegister(markedDeadCount)
 }
 
 func (s *backendSet) Expired() bool {
@@ -122,6 +136,7 @@ func (router *Router) ChooseBackend(host string) (*reverseproxy.RequestData, err
 func (router *Router) EndRequest(reqData *reverseproxy.RequestData, isDead bool, fn func() *log.LogEntry) error {
 	var markErr error
 	if isDead {
+		markedDeadCount.Inc()
 		markErr = router.Backend.MarkDead(reqData.Host, reqData.Backend, reqData.BackendIdx, reqData.BackendLen, router.DeadBackendTTL)
 	}
 	if router.logger != nil && fn != nil {
