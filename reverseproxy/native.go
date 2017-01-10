@@ -41,8 +41,8 @@ var (
 	requestDurations = prometheus.NewHistogram(prometheus.HistogramOpts{
 		Namespace: "planb",
 		Subsystem: "reverseproxy",
-		Name:      "request_duration_seconds",
-		Help:      "The total request latencies in seconds.",
+		Name:      "http_request_duration_seconds",
+		Help:      "The total HTTP request latencies in seconds.",
 	})
 
 	backendDurations = prometheus.NewHistogram(prometheus.HistogramOpts{
