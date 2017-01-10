@@ -20,6 +20,7 @@ import (
 
 	"github.com/braintree/manners"
 	"github.com/nu7hatch/gouuid"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tsuru/planb/log"
 )
 
@@ -29,7 +30,42 @@ var (
 	noopDirector        = func(*http.Request) {}
 
 	_ ReverseProxy = &NativeReverseProxy{}
+
+	openConnections = prometheus.NewGauge(prometheus.GaugeOpts{
+		Namespace: "planb",
+		Subsystem: "reverseproxy",
+		Name:      "connections_open",
+		Help:      "The current number of open connections.",
+	})
+
+	requestDurations = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: "planb",
+		Subsystem: "reverseproxy",
+		Name:      "request_duration_seconds",
+		Help:      "The total request latencies in seconds.",
+	})
+
+	backendDurations = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Namespace: "planb",
+		Subsystem: "reverseproxy",
+		Name:      "backend_request_duration_seconds",
+		Help:      "The HTTP request latencies in seconds.",
+	})
+
+	backendResponse = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "planb",
+		Subsystem: "reverseproxy",
+		Name:      "backends_responses",
+		Help:      "The total backends responses by status code.",
+	}, []string{"status_code"})
 )
+
+func init() {
+	prometheus.MustRegister(openConnections)
+	prometheus.MustRegister(requestDurations)
+	prometheus.MustRegister(backendResponse)
+	prometheus.MustRegister(backendDurations)
+}
 
 type NativeReverseProxy struct {
 	http.Transport
@@ -90,7 +126,17 @@ func (rp *NativeReverseProxy) Initialize(rpConfig ReverseProxyConfig) error {
 }
 
 func (rp *NativeReverseProxy) Listen(listener net.Listener) {
-	server := manners.NewWithServer(&http.Server{Handler: rp})
+	server := manners.NewWithServer(&http.Server{
+		Handler: rp,
+		ConnState: func(c net.Conn, s http.ConnState) {
+			switch s {
+			case http.StateNew:
+				openConnections.Inc()
+			case http.StateClosed:
+				openConnections.Dec()
+			}
+		},
+	})
 	rp.servers = append(rp.servers, server)
 	server.Serve(listener)
 }
@@ -196,11 +242,12 @@ func (rp *NativeReverseProxy) RoundTrip(req *http.Request) (*http.Response, erro
 }
 
 func (rp *NativeReverseProxy) doResponse(req *http.Request, reqData *RequestData, rsp *http.Response, isDebug bool, isDead bool, backendDuration time.Duration) *http.Response {
+	totalDuration := time.Since(reqData.StartTime)
 	logEntry := func() *log.LogEntry {
 		return &log.LogEntry{
 			Now:             time.Now(),
 			BackendDuration: backendDuration,
-			TotalDuration:   time.Since(reqData.StartTime),
+			TotalDuration:   totalDuration,
 			BackendKey:      reqData.BackendKey,
 			RemoteAddr:      req.RemoteAddr,
 			Method:          req.Method,
@@ -229,6 +276,9 @@ func (rp *NativeReverseProxy) doResponse(req *http.Request, reqData *RequestData
 	if err != nil {
 		reqData.logError(req.URL.Path, rp.ridString(req), err)
 	}
+	backendResponse.WithLabelValues(strconv.Itoa(rsp.StatusCode)).Inc()
+	backendDurations.Observe(backendDuration.Seconds())
+	requestDurations.Observe(totalDuration.Seconds())
 	return rsp
 }
 
