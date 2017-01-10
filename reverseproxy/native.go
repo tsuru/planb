@@ -49,7 +49,7 @@ var (
 		Namespace: "planb",
 		Subsystem: "reverseproxy",
 		Name:      "backend_request_duration_seconds",
-		Help:      "The HTTP request latencies in seconds.",
+		Help:      "The backends HTTP request latencies in seconds.",
 	})
 
 	backendResponse = prometheus.NewCounterVec(prometheus.CounterOpts{
