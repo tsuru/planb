@@ -63,7 +63,20 @@ func (r *RouterListener) httpListener() net.Listener {
 }
 
 func (r *RouterListener) httpsListener() net.Listener {
-	tlsConfig := &stdtls.Config{GetCertificate: r.CertLoader.GetCertificate}
+	tlsConfig := &stdtls.Config{
+		PreferServerCipherSuites: true,
+		CurvePreferences: []stdtls.CurveID{
+			stdtls.CurveP256,
+		},
+		MinVersion: stdtls.VersionTLS12,
+		CipherSuites: []uint16{
+			stdtls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			stdtls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			stdtls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			stdtls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		},
+		GetCertificate: r.CertLoader.GetCertificate,
+	}
 	listener, err := net.Listen("tcp", r.TLSListen)
 	if err != nil {
 		log.Fatal(err)
