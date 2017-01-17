@@ -35,7 +35,7 @@ var (
 		Namespace: "planb",
 		Subsystem: "reverseproxy",
 		Name:      "connections_current_open",
-		Help:      "The current number of open connections.",
+		Help:      "The current number of open connections excluding hijacked ones.",
 	})
 
 	requestDurations = prometheus.NewHistogram(prometheus.HistogramOpts{
@@ -132,6 +132,8 @@ func (rp *NativeReverseProxy) Listen(listener net.Listener) {
 			switch s {
 			case http.StateNew:
 				openConnections.Inc()
+			case http.StateHijacked:
+				openConnections.Dec()
 			case http.StateClosed:
 				openConnections.Dec()
 			}
