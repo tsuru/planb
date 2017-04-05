@@ -3,3 +3,4 @@ planb
 *.pprof
 *.test
 stdout
+dist/

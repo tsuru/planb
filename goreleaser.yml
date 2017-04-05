@@ -1,0 +1,18 @@
+# goreleaser.yml
+# Build customization
+build:
+  main: ./main.go
+  binary_name: planb
+  ldflags: ' '
+  goos:
+    - linux
+  goarch:
+    - amd64
+
+# Archive customization
+archive:
+  name_template: "planb_{{.Version}}_{{.Os}}_{{.Arch}}"
+  format: tar.gz
+  replacements:
+    amd64: amd64
+    linux: linux

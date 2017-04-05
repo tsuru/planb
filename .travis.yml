@@ -10,6 +10,10 @@ env:
     - IMAGE_NAME=tsuru/planb
   matrix:
     - GOARCH=amd64
+addons:
+  apt:
+    packages:
+      - rpm
 install:
   - true
 script:
@@ -17,6 +21,7 @@ script:
   - CGO_ENABLED=0 go build
 after_success:
   - curl https://raw.githubusercontent.com/tsuru/push-to-docker/master/push.sh | bash
+  - test -n "$TRAVIS_TAG" && curl -sL https://raw.githubusercontent.com/tsuru/push-to-packagecloud/master/push.sh | PACKAGE_NAME=planb bash
 services:
   - redis-server
   - docker
