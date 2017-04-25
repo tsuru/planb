@@ -34,11 +34,15 @@ type ReverseProxy interface {
 }
 
 type ReverseProxyConfig struct {
-	Router          Router
-	FlushInterval   time.Duration
-	DialTimeout     time.Duration
-	RequestTimeout  time.Duration
-	RequestIDHeader string
+	Router            Router
+	FlushInterval     time.Duration
+	DialTimeout       time.Duration
+	RequestTimeout    time.Duration
+	ReadTimeout       time.Duration
+	ReadHeaderTimeout time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	RequestIDHeader   string
 }
 
 type RequestData struct {

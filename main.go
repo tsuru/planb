@@ -112,11 +112,15 @@ func runServer(c *cli.Context) {
 		log.Fatal(err)
 	}
 	err = rp.Initialize(reverseproxy.ReverseProxyConfig{
-		Router:          &r,
-		RequestIDHeader: c.String("request-id-header"),
-		FlushInterval:   time.Duration(c.Int("flush-interval")) * time.Millisecond,
-		DialTimeout:     time.Duration(c.Int("dial-timeout")) * time.Second,
-		RequestTimeout:  time.Duration(c.Int("request-timeout")) * time.Second,
+		Router:            &r,
+		RequestIDHeader:   c.String("request-id-header"),
+		FlushInterval:     time.Duration(c.Int("flush-interval")) * time.Millisecond,
+		DialTimeout:       time.Duration(c.Int("dial-timeout")) * time.Second,
+		RequestTimeout:    time.Duration(c.Int("request-timeout")) * time.Second,
+		ReadTimeout:       c.Duration("client-read-timeout"),
+		ReadHeaderTimeout: c.Duration("client-read-header-timeout"),
+		WriteTimeout:      c.Duration("client-write-timeout"),
+		IdleTimeout:       c.Duration("client-idle-timeout"),
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -262,6 +266,46 @@ The value 'none' can be used to disable access logs.`),
 			Name:  "dial-timeout",
 			Value: 10,
 			Usage: "Dial backend request timeout in seconds",
+		},
+		cli.DurationFlag{
+			Name:  "client-read-timeout",
+			Value: 0,
+			Usage: "Maximum duration for reading the entire request, including the body",
+		},
+		cli.DurationFlag{
+			Name:  "client-read-header-timeout",
+			Value: 0,
+			Usage: "Amount of time allowed to read request headers",
+		},
+		cli.DurationFlag{
+			Name:  "client-write-timeout",
+			Value: 0,
+			Usage: "Maximum duration before timing out writes of the response",
+		},
+		cli.DurationFlag{
+			Name:  "client-idle-timeout",
+			Value: 0,
+			Usage: "Maximum amount of time to wait for the next request when keep-alives are enabled",
+		},
+		cli.IntFlag{
+			Name:  "client-read-timeout",
+			Value: 0,
+			Usage: "Maximum duration for reading the entire request, including the body",
+		},
+		cli.IntFlag{
+			Name:  "client-read-header-timeout",
+			Value: 0,
+			Usage: "Amount of time allowed to read request headers",
+		},
+		cli.IntFlag{
+			Name:  "client-write-timeout",
+			Value: 0,
+			Usage: "Maximum duration before timing out writes of the response",
+		},
+		cli.IntFlag{
+			Name:  "client-idle-timeout",
+			Value: 0,
+			Usage: "Maximum amount of time to wait for the next request when keep-alives are enabled",
 		},
 		cli.IntFlag{
 			Name:  "dead-backend-time",

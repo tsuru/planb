@@ -37,8 +37,14 @@ The following flags are available for configuring PlanB on start-up:
   be sent to stdout. Default value is ``./access.log``.
 - ``--request-timeout``: Total backend request timeout in seconds. Default
   value is ``30``.
-- ``--dial-timeout``: Dial backend request timeout in seconds. Default value is
-  ``10``.
+- ``--dial-timeout``: Dial backend request timeout in seconds. Default value is ``10``.
+- ``--client-read-timeout``: Maximum duration for reading the entire request, including the body. Default
+  value is ``0``.
+- ``--client-read-header-timeout``: Amount of time allowed to read request headers. Default value is ``0``.
+- ``--client-write-timeout``: Maximum duration before timing out writes of the response. Default
+  value is ``0``.
+- ``--client-idle-timeout``: Maximum amount of time to wait for the next request when keep-alives are enabled. Default value is
+  ``0``.
 - ``--dead-backend-time``: Time in seconds a backend will remain disabled after
   a network failure. Default value is ``30``.
 - ``--flush-interval``: Time in milliseconds to flush the proxied request.
