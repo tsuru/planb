@@ -202,6 +202,9 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 		case nil, ErrNoRegisteredBackends:
 			status = http.StatusBadRequest
 			body = noRouteResponseContent
+		case ErrAllBackendsDead:
+			status = http.StatusServiceUnavailable
+			body = allBackendsDeadContent
 		default:
 			status = http.StatusServiceUnavailable
 		}

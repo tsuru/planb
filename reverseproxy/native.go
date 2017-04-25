@@ -25,9 +25,10 @@ import (
 )
 
 var (
-	emptyResponseBody   = &fixedReadCloser{}
-	noRouteResponseBody = &fixedReadCloser{value: noRouteResponseContent}
-	noopDirector        = func(*http.Request) {}
+	emptyResponseBody           = &fixedReadCloser{}
+	noRouteResponseBody         = &fixedReadCloser{value: noRouteResponseContent}
+	allBackendsDeadResponseBody = &fixedReadCloser{value: allBackendsDeadContent}
+	noopDirector                = func(*http.Request) {}
 
 	_ ReverseProxy = &NativeReverseProxy{}
 
@@ -289,6 +290,12 @@ func (rp *NativeReverseProxy) roundTripWithData(req *http.Request, reqData *Requ
 	req.Header.Del("X-Debug-Router")
 	if err != nil || req.URL.Scheme == "" || req.URL.Host == "" {
 		switch err {
+		case ErrAllBackendsDead:
+			rsp = &http.Response{
+				StatusCode:    http.StatusServiceUnavailable,
+				ContentLength: int64(len(allBackendsDeadResponseBody.value)),
+				Body:          allBackendsDeadResponseBody,
+			}
 		case nil, ErrNoRegisteredBackends:
 			rsp = &http.Response{
 				StatusCode:    http.StatusBadRequest,

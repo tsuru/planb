@@ -384,7 +384,7 @@ func (s *S) TestRoundTripWithErrAllBackendsDead(c *check.C) {
 	c.Assert(rsp.StatusCode, check.Equals, 503)
 	data, err := ioutil.ReadAll(rsp.Body)
 	c.Assert(err, check.IsNil)
-	c.Assert(string(data), check.Equals, "")
+	c.Assert(string(data), check.Equals, "all backends are dead")
 	c.Assert(router.logEntry.RequestID, check.Not(check.Equals), "")
 	c.Assert(router.resultHost, check.Equals, "myhost.com")
 	c.Assert(router.resultReqData, check.DeepEquals, &RequestData{
