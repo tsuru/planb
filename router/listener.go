@@ -72,6 +72,8 @@ func (r *RouterListener) httpsListener() net.Listener {
 		CipherSuites: []uint16{
 			stdtls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
 			stdtls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			stdtls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+			stdtls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
 			stdtls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
 			stdtls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 		},
