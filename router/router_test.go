@@ -89,6 +89,25 @@ func (s *S) TestChooseBackend(c *check.C) {
 	})
 }
 
+func (s *S) TestChooseBackendIgnorePort(c *check.C) {
+	router := Router{}
+	err := router.Init()
+	c.Assert(err, check.IsNil)
+	err = s.redis.RPush("frontend:myfrontend.com", "myfrontend", "http://url1:123").Err()
+	c.Assert(err, check.IsNil)
+	reqData, err := router.ChooseBackend("myfrontend.com:80")
+	c.Assert(err, check.IsNil)
+	c.Assert(reqData.StartTime.IsZero(), check.Equals, false)
+	reqData.StartTime = time.Time{}
+	c.Assert(reqData, check.DeepEquals, &reverseproxy.RequestData{
+		Backend:    "http://url1:123",
+		BackendIdx: 0,
+		BackendKey: "myfrontend.com",
+		BackendLen: 1,
+		Host:       "myfrontend.com",
+	})
+}
+
 func (s *S) TestChooseBackendNotFound(c *check.C) {
 	router := Router{}
 	err := router.Init()

@@ -5,6 +5,7 @@
 package router
 
 import (
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -86,6 +87,8 @@ func (router *Router) Init() error {
 }
 
 func (router *Router) ChooseBackend(host string) (*reverseproxy.RequestData, error) {
+	hostParts := strings.SplitN(host, ":", 2)
+	host = hostParts[0]
 	reqData := &reverseproxy.RequestData{
 		StartTime: time.Now(),
 		Host:      host,
