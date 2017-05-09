@@ -5,7 +5,7 @@
 package router
 
 import (
-	"strings"
+	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -87,13 +87,18 @@ func (router *Router) Init() error {
 }
 
 func (router *Router) ChooseBackend(host string) (*reverseproxy.RequestData, error) {
-	hostParts := strings.SplitN(host, ":", 2)
-	host = hostParts[0]
 	reqData := &reverseproxy.RequestData{
 		StartTime: time.Now(),
 		Host:      host,
 	}
 	set, err := router.getBackends(host)
+	if err == reverseproxy.ErrNoRegisteredBackends {
+		noPortHost, _, _ := net.SplitHostPort(host)
+		if noPortHost != "" {
+			reqData.Host = noPortHost
+			set, err = router.getBackends(noPortHost)
+		}
+	}
 	if err != nil {
 		return reqData, err
 	}
