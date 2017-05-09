@@ -171,7 +171,7 @@ func fixUsage(s string) string {
 	lastPart := 0
 	var lines []string
 	for i := range parts {
-		if currLen+len(parts[i])+1 > 55 {
+		if currLen+len(parts[i])+1 > 65 {
 			lines = append(lines, strings.Join(parts[lastPart:i], " "))
 			currLen = 0
 			lastPart = i
@@ -183,6 +183,15 @@ func fixUsage(s string) string {
 }
 
 func main() {
+	oldStringer := cli.FlagStringer
+	cli.FlagStringer = func(flag cli.Flag) string {
+		usage := oldStringer(flag)
+		usageIdx := strings.LastIndex(usage, "\t")
+		if usageIdx != -1 {
+			usage = usage[:usageIdx] + "\t" + fixUsage(usage[usageIdx+1:])
+		}
+		return usage
+	}
 	app := cli.NewApp()
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -201,8 +210,8 @@ func main() {
 		cli.StringFlag{
 			Name:  "load-certificates-from",
 			Value: "redis",
-			Usage: fixUsage(`Path where certificate will found.
-If value equals 'redis' certificate will be loaded from redis service.`),
+			Usage: `Path where certificate will found.
+If value equals 'redis' certificate will be loaded from redis service.`,
 		},
 		cli.StringFlag{
 			Name:  "read-redis-host",
@@ -249,9 +258,9 @@ If value equals 'redis' certificate will be loaded from redis service.`),
 		cli.StringFlag{
 			Name:  "access-log",
 			Value: "./access.log",
-			Usage: fixUsage(`File path where access log will be written.
+			Usage: `File path where access log will be written.
 If value equals 'syslog' log will be sent to local syslog.
-The value 'none' can be used to disable access logs.`),
+The value 'none' can be used to disable access logs.`,
 		},
 		cli.IntFlag{
 			Name:  "request-timeout",
@@ -266,12 +275,12 @@ The value 'none' can be used to disable access logs.`),
 		cli.IntFlag{
 			Name:  "dead-backend-time",
 			Value: 30,
-			Usage: fixUsage("Time in seconds a backend will remain disabled after a network failure"),
+			Usage: "Time in seconds a backend will remain disabled after a network failure",
 		},
 		cli.IntFlag{
 			Name:  "flush-interval",
 			Value: 10,
-			Usage: fixUsage("Time in milliseconds to flush the proxied request"),
+			Usage: "Time in milliseconds to flush the proxied request",
 		},
 		cli.StringFlag{
 			Name:  "request-id-header",
@@ -283,7 +292,7 @@ The value 'none' can be used to disable access logs.`),
 		cli.StringFlag{
 			Name:  "engine",
 			Value: "native",
-			Usage: fixUsage("Reverse proxy engine, options are 'native' and 'fasthttp'"),
+			Usage: "Reverse proxy engine, options are 'native' and 'fasthttp'. Using 'fasthttp' is highly experimental and not recommended for production environments.",
 		},
 		cli.BoolFlag{
 			Name:  "backend-cache",
