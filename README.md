@@ -17,7 +17,7 @@ replacing Hipache's executable for PlanB.
 The following flags are available for configuring PlanB on start-up:
 
 - ``--listen/-l``: the address to which PlanB will bind. Default value is
-  ``0.0.0.0:8989``, if you want to disable http access use `disable`.
+  ``0.0.0.0:8989``, if you want to disable http access use `disabled`.
 - ``--tls-listen``: the address to which PlanB will bind with tls support.
 - ``--load-certificates-from``: Path where certificate will found. If value
   equals 'redis' certificate will be loaded from redis service. Default value
@@ -28,10 +28,14 @@ The following flags are available for configuring PlanB on start-up:
   addresses. Default value is ``localhost``.
 - ``--read-redis-port``: Redis port of the server which contains application
   addresses. Default value is ``6379``.
+- ``--read-redis-password``: Redis password of the server which contains application
+  addresses. If not defined, no authentication will be performed.
 - ``--write-redis-host``: Redis host of the server which PlanB will use for
   publishing dead backends. Default value is ``localhost``.
 - ``--write-redis-port``: Redis port of the server which which PlanB will use
   for publishing dead backends. Default value is ``6379``.
+- ``--write-redis-password``: Redis password of the server which which PlanB will use
+  for publishing dead backends. If not defined, no authentication will be performed.
 - ``--access-log``: File path where access log will be written. If value equals
   ``syslog`` log will be sent to local syslog. If value equals ``stdout`` log will
   be sent to stdout. Default value is ``./access.log``.
