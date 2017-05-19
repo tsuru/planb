@@ -9,7 +9,7 @@ import (
 	"net"
 	"net/url"
 
-	uuid "github.com/satori/go.uuid"
+	"github.com/nu7hatch/gouuid"
 	"github.com/tsuru/planb/log"
 )
 
@@ -29,12 +29,12 @@ func (rp *SNIReverseProxy) Stop() {
 func (rp *SNIReverseProxy) Listen(listener net.Listener) {
 	for {
 		connection, err := listener.Accept()
-		ConnID := uuid.NewV4().String()
+		ConnID, _ := uuid.NewV4()
 		if err != nil {
-			log.ErrorLogger.Print("ERROR in ACCEPT - ", listener.Addr(), " - ", ConnID, " - ", err.Error())
+			log.ErrorLogger.Print("ERROR in ACCEPT - ", listener.Addr(), " - ", ConnID.String(), " - ", err.Error())
 			return
 		}
-		go rp.handleSNIConnection(connection, ConnID)
+		go rp.handleSNIConnection(connection, ConnID.String())
 	}
 }
 
