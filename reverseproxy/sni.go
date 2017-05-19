@@ -29,41 +29,42 @@ func (rp *SNIReverseProxy) Stop() {
 func (rp *SNIReverseProxy) Listen(listener net.Listener) {
 	for {
 		connection, err := listener.Accept()
-		ConnID, _ := uuid.NewV4()
+		connID, _ := uuid.NewV4()
 		if err != nil {
-			log.ErrorLogger.Print("ERROR in ACCEPT - ", listener.Addr(), " - ", ConnID.String(), " - ", err.Error())
+			log.ErrorLogger.Print("ERROR in ACCEPT - ", listener.Addr(), " - ", connID.String(), " - ", err.Error())
 			return
 		}
-		go rp.handleSNIConnection(connection, ConnID.String())
+		go rp.handleSNIConnection(connection, connID.String())
 	}
 }
 
-func (rp *SNIReverseProxy) handleSNIConnection(downstream net.Conn, ConnID string) {
+func (rp *SNIReverseProxy) handleSNIConnection(downstream net.Conn, connID string) {
 	firstByte := make([]byte, 1)
 	_, err := downstream.Read(firstByte)
 	if err != nil {
-		log.ErrorLogger.Print("ERROR - Couldn't read first byte - ", ConnID)
+		log.ErrorLogger.Print("ERROR - Couldn't read first byte - ", connID)
 		return
 	}
 	if firstByte[0] != 0x16 {
-		log.ErrorLogger.Print("ERROR - Not TLS - ", ConnID)
+		log.ErrorLogger.Print("ERROR - Not TLS - ", connID)
+		return
 	}
 
 	versionBytes := make([]byte, 2)
 	_, err = downstream.Read(versionBytes)
 	if err != nil {
-		log.ErrorLogger.Print("ERROR - Couldn't read version bytes - ", ConnID)
+		log.ErrorLogger.Print("ERROR - Couldn't read version bytes - ", connID)
 		return
 	}
 	if versionBytes[0] < 3 || (versionBytes[0] == 3 && versionBytes[1] < 1) {
-		log.ErrorLogger.Print("ERROR -  SSL < 3.1 so it's still not TLS - ", ConnID)
+		log.ErrorLogger.Print("ERROR -  SSL < 3.1 so it's still not TLS - ", connID)
 		return
 	}
 
 	restLengthBytes := make([]byte, 2)
 	_, err = downstream.Read(restLengthBytes)
 	if err != nil {
-		log.ErrorLogger.Print("ERROR - Couldn't read restLength bytes - ", ConnID)
+		log.ErrorLogger.Print("ERROR - Couldn't read restLength bytes - ", connID)
 		return
 	}
 	restLength := (int(restLengthBytes[0]) << 8) + int(restLengthBytes[1])
@@ -71,7 +72,7 @@ func (rp *SNIReverseProxy) handleSNIConnection(downstream net.Conn, ConnID strin
 	rest := make([]byte, restLength)
 	_, err = downstream.Read(rest)
 	if err != nil {
-		log.ErrorLogger.Print("ERROR - Couldn't read rest of bytes - ", ConnID)
+		log.ErrorLogger.Print("ERROR - Couldn't read rest of bytes - ", connID)
 		return
 	}
 
@@ -80,7 +81,7 @@ func (rp *SNIReverseProxy) handleSNIConnection(downstream net.Conn, ConnID strin
 	handshakeType := rest[0]
 	current++
 	if handshakeType != 0x1 {
-		log.ErrorLogger.Print("ERROR - Not a ClientHello - ", ConnID)
+		log.ErrorLogger.Print("ERROR - Not a ClientHello - ", connID)
 		return
 	}
 
@@ -104,7 +105,7 @@ func (rp *SNIReverseProxy) handleSNIConnection(downstream net.Conn, ConnID strin
 	current += compressionMethodLength
 
 	if current > restLength {
-		log.ErrorLogger.Print("ERROR - no extensions - ", ConnID)
+		log.ErrorLogger.Print("ERROR - no extensions - ", connID)
 		return
 	}
 
@@ -128,7 +129,7 @@ func (rp *SNIReverseProxy) handleSNIConnection(downstream net.Conn, ConnID strin
 			nameType := rest[current]
 			current++
 			if nameType != 0 {
-				log.ErrorLogger.Print("ERROR - Not a hostname - ", ConnID)
+				log.ErrorLogger.Print("ERROR - Not a hostname - ", connID)
 				return
 			}
 			nameLen := (int(rest[current]) << 8) + int(rest[current+1])
@@ -139,24 +140,24 @@ func (rp *SNIReverseProxy) handleSNIConnection(downstream net.Conn, ConnID strin
 		current += extensionDataLength
 	}
 	if hostname == "" {
-		log.ErrorLogger.Print("ERROR - No hostname - ", ConnID)
+		log.ErrorLogger.Print("ERROR - No hostname - ", connID)
 		return
 	}
 
 	reqData, err := rp.Router.ChooseBackend(hostname)
 	if err != nil {
-		log.ErrorLogger.Print("ERROR - ChooseBackend - ", ConnID, " - ", err)
+		log.ErrorLogger.Print("ERROR - ChooseBackend - ", connID, " - ", err)
 		return
 	}
 	url, err := url.Parse(reqData.Backend)
 	if err != nil {
-		log.ErrorLogger.Print("ERROR - url.Parse - ", ConnID, " - ", err)
+		log.ErrorLogger.Print("ERROR - url.Parse - ", connID, " - ", err)
 		return
 	}
 	backendAddress := url.Host
 	upstream, err := net.Dial("tcp", backendAddress)
 	if err != nil {
-		log.ErrorLogger.Print("ERROR - ConnectBackend - ", ConnID, " - ", err)
+		log.ErrorLogger.Print("ERROR - ConnectBackend - ", connID, " - ", err)
 		return
 	}
 
