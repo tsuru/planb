@@ -128,7 +128,11 @@ func (rp *NativeReverseProxy) Initialize(rpConfig ReverseProxyConfig) error {
 
 func (rp *NativeReverseProxy) Listen(listener net.Listener) {
 	server := manners.NewWithServer(&http.Server{
-		Handler: rp,
+		ReadTimeout:       rp.ReadTimeout,
+		ReadHeaderTimeout: rp.ReadHeaderTimeout,
+		WriteTimeout:      rp.WriteTimeout,
+		IdleTimeout:       rp.IdleTimeout,
+		Handler:           rp,
 		ConnState: func(c net.Conn, s http.ConnState) {
 			switch s {
 			case http.StateNew:
