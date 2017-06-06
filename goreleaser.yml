@@ -2,7 +2,7 @@
 # Build customization
 build:
   main: ./main.go
-  binary_name: planb
+  binary: planb
   ldflags: ' '
   goos:
     - linux
