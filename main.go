@@ -297,26 +297,6 @@ The value 'none' can be used to disable access logs.`,
 			Usage: "Maximum amount of time to wait for the next request when keep-alives are enabled",
 		},
 		cli.IntFlag{
-			Name:  "client-read-timeout",
-			Value: 0,
-			Usage: "Maximum duration for reading the entire request, including the body",
-		},
-		cli.IntFlag{
-			Name:  "client-read-header-timeout",
-			Value: 0,
-			Usage: "Amount of time allowed to read request headers",
-		},
-		cli.IntFlag{
-			Name:  "client-write-timeout",
-			Value: 0,
-			Usage: "Maximum duration before timing out writes of the response",
-		},
-		cli.IntFlag{
-			Name:  "client-idle-timeout",
-			Value: 0,
-			Usage: "Maximum amount of time to wait for the next request when keep-alives are enabled",
-		},
-		cli.IntFlag{
 			Name:  "dead-backend-time",
 			Value: 30,
 			Usage: "Time in seconds a backend will remain disabled after a network failure",
