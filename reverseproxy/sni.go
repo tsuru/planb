@@ -13,19 +13,23 @@ import (
 	"github.com/tsuru/planb/log"
 )
 
+// SNIReverseProxy is public struct for SNI reverseproxy
 type SNIReverseProxy struct {
 	ReverseProxyConfig
 }
 
+// Initialize is public interface used on main.go to initialize reverseproxy
 func (rp *SNIReverseProxy) Initialize(rpConfig ReverseProxyConfig) error {
 	rp.ReverseProxyConfig = rpConfig
 	return nil
 }
 
+// Stop is public interface used on main to stop reverseproxy after os.Interrupt or os.Kill signal
 func (rp *SNIReverseProxy) Stop() {
-	// no special treatment for fast reverse proxy
+	// no special treatment for sni reverse proxy
 }
 
+// Listen is public interface used in router/listener.go
 func (rp *SNIReverseProxy) Listen(listener net.Listener) {
 	for {
 		connection, err := listener.Accept()
@@ -39,6 +43,7 @@ func (rp *SNIReverseProxy) Listen(listener net.Listener) {
 }
 
 func (rp *SNIReverseProxy) handleSNIConnection(downstream net.Conn, connID string) {
+	defer downstream.Close()
 	firstByte := make([]byte, 1)
 	_, err := downstream.Read(firstByte)
 	if err != nil {
@@ -160,6 +165,7 @@ func (rp *SNIReverseProxy) handleSNIConnection(downstream net.Conn, connID strin
 		log.ErrorLogger.Print("ERROR - ConnectBackend - ", connID, " - ", err)
 		return
 	}
+	defer upstream.Close()
 
 	upstream.Write(firstByte)
 	upstream.Write(versionBytes)
