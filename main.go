@@ -72,6 +72,8 @@ func runServer(c *cli.Context) {
 		rp = &reverseproxy.NativeReverseProxy{}
 	case "fasthttp":
 		rp = &reverseproxy.FastReverseProxy{}
+	case "sni":
+		rp = &reverseproxy.SNIReverseProxy{}
 	default:
 		log.Fatal(errors.New("invalid engine"))
 	}
@@ -130,6 +132,7 @@ func runServer(c *cli.Context) {
 		ReverseProxy: rp,
 		Listen:       c.String("listen"),
 		TLSListen:    c.String("tls-listen"),
+		SNIListen:    c.String("sni-listen"),
 		CertLoader:   getCertificateLoader(c, readOpts),
 	}
 
@@ -206,6 +209,10 @@ func main() {
 		cli.StringFlag{
 			Name:  "tls-listen",
 			Usage: "Address to listen with tls",
+		},
+		cli.StringFlag{
+			Name:  "sni-listen",
+			Usage: "Address to listen with tls-sni",
 		},
 		cli.StringFlag{
 			Name:  "metrics-address",
