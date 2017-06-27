@@ -77,6 +77,7 @@ func runServer(c *cli.Context) {
 	default:
 		log.Fatal(errors.New("invalid engine"))
 	}
+	log.Printf("Using %T engine\n", rp)
 	readOpts := backend.RedisOptions{
 		Host:          c.String("read-redis-host"),
 		Port:          c.Int("read-redis-port"),
@@ -132,7 +133,6 @@ func runServer(c *cli.Context) {
 		ReverseProxy: rp,
 		Listen:       c.String("listen"),
 		TLSListen:    c.String("tls-listen"),
-		SNIListen:    c.String("sni-listen"),
 		CertLoader:   getCertificateLoader(c, readOpts),
 	}
 
@@ -209,10 +209,6 @@ func main() {
 		cli.StringFlag{
 			Name:  "tls-listen",
 			Usage: "Address to listen with tls",
-		},
-		cli.StringFlag{
-			Name:  "sni-listen",
-			Usage: "Address to listen with tls-sni",
 		},
 		cli.StringFlag{
 			Name:  "metrics-address",
@@ -323,7 +319,7 @@ The value 'none' can be used to disable access logs.`,
 		cli.StringFlag{
 			Name:  "engine",
 			Value: "native",
-			Usage: "Reverse proxy engine, options are 'native' and 'fasthttp'. Using 'fasthttp' is highly experimental and not recommended for production environments.",
+			Usage: "Reverse proxy engine, options are 'native', 'sni' and 'fasthttp'. Using 'sni' and 'fasthttp' is highly experimental and not recommended for production environments.",
 		},
 		cli.BoolFlag{
 			Name:  "backend-cache",

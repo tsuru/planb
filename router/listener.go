@@ -17,7 +17,6 @@ type RouterListener struct {
 	ReverseProxy reverseproxy.ReverseProxy
 	Listen       string
 	TLSListen    string
-	SNIListen    string
 	CertLoader   tls.CertificateLoader
 }
 
@@ -27,7 +26,7 @@ func (r *RouterListener) Serve() {
 
 	if r.Listen != "disabled" {
 		r.wg.Add(1)
-		listener = r.httpListener()
+		listener = r.tcpListener()
 		r.listeners = append(r.listeners, listener)
 
 		log.Printf("Listening on %s...\n", listener.Addr().String())
@@ -36,19 +35,10 @@ func (r *RouterListener) Serve() {
 
 	if r.TLSListen != "" {
 		r.wg.Add(1)
-		listener = r.httpsListener()
+		listener = r.tlsListener()
 		r.listeners = append(r.listeners, listener)
 
 		log.Printf("Listening tls on %s...\n", listener.Addr().String())
-		go r.listen(listener)
-	}
-
-	if r.SNIListen != "" {
-		r.wg.Add(1)
-		listener = r.sniListener()
-		r.listeners = append(r.listeners, listener)
-
-		log.Printf("Listening tls-sni on %s...\n", listener.Addr().String())
 		go r.listen(listener)
 	}
 
@@ -64,7 +54,7 @@ func (r *RouterListener) Stop() {
 	}
 }
 
-func (r *RouterListener) httpListener() net.Listener {
+func (r *RouterListener) tcpListener() net.Listener {
 	listener, err := net.Listen("tcp", r.Listen)
 	if err != nil {
 		log.Fatal(err)
@@ -72,7 +62,7 @@ func (r *RouterListener) httpListener() net.Listener {
 	return listener
 }
 
-func (r *RouterListener) httpsListener() net.Listener {
+func (r *RouterListener) tlsListener() net.Listener {
 	tlsConfig := &stdtls.Config{
 		PreferServerCipherSuites: true,
 		CurvePreferences: []stdtls.CurveID{
@@ -94,14 +84,6 @@ func (r *RouterListener) httpsListener() net.Listener {
 		log.Fatal(err)
 	}
 	return stdtls.NewListener(listener, tlsConfig)
-}
-
-func (r *RouterListener) sniListener() net.Listener {
-	listener, err := net.Listen("tcp", r.SNIListen)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return listener
 }
 
 func (r *RouterListener) listen(listener net.Listener) {
