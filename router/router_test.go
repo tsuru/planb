@@ -55,7 +55,7 @@ func (s *S) TestInit(c *check.C) {
 	router := Router{}
 	err := router.Init()
 	c.Assert(err, check.IsNil)
-	c.Assert(router.roundRobin, check.DeepEquals, map[string]*int32{})
+	c.Assert(router.roundRobin, check.DeepEquals, map[string]*uint32{})
 	c.Assert(router.logger, check.IsNil)
 	c.Assert(router.cache, check.IsNil)
 	c.Assert(router.Backend, check.NotNil)
@@ -65,7 +65,7 @@ func (s *S) TestInitCacheEnabled(c *check.C) {
 	router := Router{CacheEnabled: true}
 	err := router.Init()
 	c.Assert(err, check.IsNil)
-	c.Assert(router.roundRobin, check.DeepEquals, map[string]*int32{})
+	c.Assert(router.roundRobin, check.DeepEquals, map[string]*uint32{})
 	c.Assert(router.logger, check.IsNil)
 	c.Assert(router.cache, check.NotNil)
 	c.Assert(router.Backend, check.NotNil)
