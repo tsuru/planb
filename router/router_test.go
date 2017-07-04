@@ -6,6 +6,7 @@ package router
 
 import (
 	"bytes"
+	"sync"
 	"testing"
 	"time"
 
@@ -263,6 +264,101 @@ func (s *S) TestChooseBackendRoundRobinWithCache(c *check.C) {
 	reqData, err = router.ChooseBackend("myfrontend.com")
 	c.Assert(err, check.IsNil)
 	c.Assert(reqData.Backend, check.Equals, "http://url4:123")
+}
+
+func (s *S) TestChooseBackendRoundRobinStress(c *check.C) {
+	router := Router{}
+	err := router.Init()
+	c.Assert(err, check.IsNil)
+	err = s.redis.RPush("frontend:myfrontend.com", "myfrontend",
+		"http://url1",
+		"http://url2",
+		"http://url3",
+		"http://url4",
+		"http://url5").Err()
+	c.Assert(err, check.IsNil)
+	err = s.redis.RPush("frontend:myfrontend2.com", "myfrontend",
+		"http://url1",
+		"http://url2").Err()
+	c.Assert(err, check.IsNil)
+	freq1 := map[int]int{}
+	freq2 := map[int]int{}
+	mu := sync.Mutex{}
+	wg := sync.WaitGroup{}
+	nParallel := 10
+	nSeq := 1000
+	for i := 0; i < nParallel; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < nSeq; j++ {
+				reqData1, err := router.ChooseBackend("myfrontend.com")
+				c.Assert(err, check.IsNil)
+				reqData2, err := router.ChooseBackend("myfrontend2.com")
+				c.Assert(err, check.IsNil)
+				mu.Lock()
+				freq1[reqData1.BackendIdx]++
+				freq2[reqData2.BackendIdx]++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	expected1 := (nParallel * nSeq) / 5
+	expected2 := (nParallel * nSeq) / 2
+	c.Assert(freq1, check.DeepEquals, map[int]int{
+		0: expected1,
+		1: expected1,
+		2: expected1,
+		3: expected1,
+		4: expected1,
+	})
+	c.Assert(freq2, check.DeepEquals, map[int]int{
+		0: expected2,
+		1: expected2,
+	})
+}
+
+func (s *S) TestChooseBackendRoundRobinStressOverflow(c *check.C) {
+	router := Router{}
+	err := router.Init()
+	c.Assert(err, check.IsNil)
+	err = s.redis.RPush("frontend:myfrontend.com", "myfrontend",
+		"http://url1",
+		"http://url2",
+		"http://url3",
+		"http://url4",
+		"http://url5").Err()
+	c.Assert(err, check.IsNil)
+	freq := map[int]int{}
+	mu := sync.Mutex{}
+	wg := sync.WaitGroup{}
+	nParallel := 10
+	nSeq := 1000
+	initialNumber := uint32(1<<32 - 2)
+	router.roundRobin["myfrontend.com"] = &initialNumber
+	for i := 0; i < nParallel; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < nSeq; j++ {
+				reqData, err := router.ChooseBackend("myfrontend.com")
+				c.Assert(err, check.IsNil)
+				mu.Lock()
+				freq[reqData.BackendIdx]++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	expected := (nParallel * nSeq) / 5
+	c.Assert(freq, check.DeepEquals, map[int]int{
+		0: expected + 1,
+		1: expected,
+		2: expected,
+		3: expected - 1,
+		4: expected,
+	})
 }
 
 type bufferCloser struct {

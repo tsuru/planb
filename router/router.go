@@ -35,7 +35,7 @@ type Router struct {
 	CacheEnabled   bool
 	logger         *log.Logger
 	rrMutex        sync.RWMutex
-	roundRobin     map[string]*int32
+	roundRobin     map[string]*uint32
 	cache          *lru.Cache
 }
 
@@ -82,7 +82,7 @@ func (router *Router) Init() error {
 			return err
 		}
 	}
-	router.roundRobin = make(map[string]*int32)
+	router.roundRobin = make(map[string]*uint32)
 	return nil
 }
 
@@ -111,7 +111,7 @@ func (router *Router) ChooseBackend(host string) (*reverseproxy.RequestData, err
 		router.rrMutex.Lock()
 		roundRobin = router.roundRobin[host]
 		if roundRobin == nil {
-			roundRobin = new(int32)
+			roundRobin = new(uint32)
 			router.roundRobin[host] = roundRobin
 		}
 		router.rrMutex.Unlock()
@@ -119,8 +119,8 @@ func (router *Router) ChooseBackend(host string) (*reverseproxy.RequestData, err
 		router.rrMutex.RUnlock()
 	}
 	// We always add, it will eventually overflow to zero which is fine.
-	initialNumber := atomic.AddInt32(roundRobin, 1)
-	initialNumber = (initialNumber - 1) % int32(reqData.BackendLen)
+	initialNumber := atomic.AddUint32(roundRobin, 1)
+	initialNumber = (initialNumber - 1) % uint32(reqData.BackendLen)
 	toUseNumber := -1
 	for chosenNumber := initialNumber; ; {
 		_, isDead := set.dead[int(chosenNumber)]
@@ -128,7 +128,7 @@ func (router *Router) ChooseBackend(host string) (*reverseproxy.RequestData, err
 			toUseNumber = int(chosenNumber)
 			break
 		}
-		chosenNumber = (chosenNumber + 1) % int32(reqData.BackendLen)
+		chosenNumber = (chosenNumber + 1) % uint32(reqData.BackendLen)
 		if chosenNumber == initialNumber {
 			break
 		}
