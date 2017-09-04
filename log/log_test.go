@@ -6,9 +6,12 @@ package log
 
 import (
 	"bytes"
+	"io"
 	"io/ioutil"
 	"os"
+	"sync"
 	"testing"
+	"time"
 
 	"gopkg.in/check.v1"
 )
@@ -21,13 +24,9 @@ func Test(t *testing.T) {
 	check.TestingT(t)
 }
 
-type bufferCloser struct {
-	bytes.Buffer
-}
+type nopCloseWriter struct{ io.Writer }
 
-func (b *bufferCloser) Close() error {
-	return nil
-}
+func (nopCloseWriter) Close() error { return nil }
 
 func (s *LogSuite) TestNewFileLogger(c *check.C) {
 	file, err := ioutil.TempFile("", "loggettest")
@@ -61,9 +60,32 @@ func (s *LogSuite) TestNewStdoutLogger(c *check.C) {
 }
 
 func (s *LogSuite) TestNewWriterLogger(c *check.C) {
-	buffer := &bufferCloser{}
-	logger := NewWriterLogger(buffer)
+	buffer := &bytes.Buffer{}
+	logger := NewWriterLogger(nopCloseWriter{buffer})
 	logger.MessageRaw(&LogEntry{})
 	logger.Stop()
 	c.Assert(buffer.String(), check.Equals, "::ffff: - - [01/Jan/0001:00:00:00 +0000] \"  \" 0 0 \"\" \"\" \":\" \"\" 0.000 0.000\n")
+}
+
+func (s *LogSuite) TestLoggerFull(c *check.C) {
+	buffer := &bytes.Buffer{}
+	ch := make(chan time.Time)
+	close(ch)
+	logger := Logger{
+		logChan:    make(chan *LogEntry, 1),
+		done:       make(chan struct{}),
+		wg:         &sync.WaitGroup{},
+		writer:     nopCloseWriter{buffer},
+		nextNotify: ch,
+	}
+	logger.wg.Add(1)
+	logger.MessageRaw(&LogEntry{})
+	logger.MessageRaw(&LogEntry{})
+	logger.MessageRaw(&LogEntry{})
+	logger.MessageRaw(&LogEntry{})
+	go logger.logWriter()
+	logger.Stop()
+	c.Assert(buffer.String(), check.Equals, `::ffff: - - [01/Jan/0001:00:00:00 +0000] "  " 0 0 "" "" ":" "" 0.000 0.000
+Dropping log messages to due to full channel buffer.
+`)
 }

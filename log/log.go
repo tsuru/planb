@@ -7,11 +7,11 @@ package log
 import (
 	"fmt"
 	"io"
-	"log"
 	"log/syslog"
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -20,14 +20,26 @@ const (
 )
 
 var (
-	ErrorLogger = log.New(os.Stderr, "", log.LstdFlags)
+	ErrorLogger = NewWriterLogger(syncCloser{os.Stderr})
+
+	fullBufferMsg = &LogEntry{Err: &ErrEntry{RawMsgs: []interface{}{"Dropping log messages to due to full channel buffer."}}}
 )
 
 type Logger struct {
 	logChan    chan *LogEntry
-	done       chan bool
+	wg         *sync.WaitGroup
 	writer     io.WriteCloser
+	done       chan struct{}
 	nextNotify <-chan time.Time
+}
+
+type ErrEntry struct {
+	Path    string
+	Rid     string
+	Err     string
+	Backend string
+	Host    string
+	RawMsgs []interface{}
 }
 
 type LogEntry struct {
@@ -45,6 +57,7 @@ type LogEntry struct {
 	RequestID       string
 	StatusCode      int
 	ContentLength   int64
+	Err             *ErrEntry
 }
 
 func NewFileLogger(path string) (*Logger, error) {
@@ -79,12 +92,18 @@ func NewStdoutLogger() (*Logger, error) {
 func NewWriterLogger(writer io.WriteCloser) *Logger {
 	l := Logger{
 		logChan:    make(chan *LogEntry, 10000),
-		done:       make(chan bool),
+		done:       make(chan struct{}),
+		wg:         &sync.WaitGroup{},
 		writer:     writer,
 		nextNotify: time.After(0),
 	}
+	l.wg.Add(1)
 	go l.logWriter()
 	return &l
+}
+
+func (l *Logger) Print(msgs ...interface{}) {
+	l.MessageRaw(&LogEntry{Err: &ErrEntry{RawMsgs: msgs}})
 }
 
 func (l *Logger) MessageRaw(entry *LogEntry) {
@@ -93,7 +112,11 @@ func (l *Logger) MessageRaw(entry *LogEntry) {
 	default:
 		select {
 		case <-l.nextNotify:
-			log.Print("Dropping log messages to due to full channel buffer.")
+			l.wg.Add(1)
+			go func() {
+				defer l.wg.Done()
+				l.logChan <- fullBufferMsg
+			}()
 			l.nextNotify = time.After(time.Minute)
 		default:
 		}
@@ -101,6 +124,8 @@ func (l *Logger) MessageRaw(entry *LogEntry) {
 }
 
 func (l *Logger) Stop() {
+	l.wg.Done()
+	l.wg.Wait()
 	close(l.logChan)
 	<-l.done
 }
@@ -109,6 +134,18 @@ func (l *Logger) logWriter() {
 	defer close(l.done)
 	defer l.writer.Close()
 	for el := range l.logChan {
+		if el.Err != nil {
+			if len(el.Err.RawMsgs) > 0 {
+				fmt.Fprintln(l.writer, el.Err.RawMsgs...)
+				continue
+			}
+			backend := el.Err.Backend
+			if backend == "" {
+				backend = "?"
+			}
+			fmt.Fprintf(l.writer, "ERROR in %s -> %s - %s - %s - %s\n", el.Err.Host, backend, el.Err.Path, el.Err.Rid, el.Err.Err)
+			continue
+		}
 		nowFormatted := el.Now.Format(TIME_HIPACHE_MODE)
 		ip, _, _ := net.SplitHostPort(el.RemoteAddr)
 		if ip == "" {

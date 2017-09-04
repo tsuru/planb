@@ -55,14 +55,14 @@ type RequestData struct {
 	AllDead    bool
 }
 
-func (r *RequestData) String() string {
-	back := r.Backend
-	if back == "" {
-		back = "?"
-	}
-	return r.Host + " -> " + back
-}
-
 func (r *RequestData) logError(path string, rid string, err error) {
-	log.ErrorLogger.Print("ERROR in ", r.String(), " - ", path, " - ", rid, " - ", err.Error())
+	log.ErrorLogger.MessageRaw(&log.LogEntry{
+		Err: &log.ErrEntry{
+			Backend: r.Backend,
+			Host:    r.Host,
+			Path:    path,
+			Rid:     rid,
+			Err:     err.Error(),
+		},
+	})
 }
