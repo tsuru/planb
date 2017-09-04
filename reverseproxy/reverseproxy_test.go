@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	stdlog "log"
 	"net"
@@ -90,10 +91,14 @@ func getFreeListener() (string, net.Listener) {
 	return listener.Addr().String(), listener
 }
 
+type nopCloseWriter struct{ io.Writer }
+
+func (nopCloseWriter) Close() error { return nil }
+
 func (s *S) SetUpTest(c *check.C) {
 	c.Logf("testing %T", s.factory())
 	s.logBuffer = bytes.NewBuffer(nil)
-	log.ErrorLogger = stdlog.New(s.logBuffer, "", 0)
+	log.ErrorLogger = log.NewWriterLogger(nopCloseWriter{s.logBuffer})
 }
 
 func (s *S) TestRoundTrip(c *check.C) {
@@ -703,8 +708,8 @@ func (s *S) TestRoundTripTimeout(c *check.C) {
 	defer rsp.Body.Close()
 	c.Assert(rsp.StatusCode, check.Equals, 503)
 	c.Assert(router.resultIsDead, check.Equals, false)
-	c.Assert(s.logBuffer.String(), check.Matches, `(?s).*request timeout after .+:.*`)
-	c.Assert(s.logBuffer.String(), check.Matches, `(?s).*RID:.+.*`)
+	log.ErrorLogger.Stop()
+	c.Assert(s.logBuffer.String(), check.Matches, fmt.Sprintf(`(?s)ERROR in myhost.com -> %s - / - RID:.+? - request timeout after .+:.*`, ts.URL))
 }
 
 func (s *S) TestRoundTripTimeoutDial(c *check.C) {
@@ -728,8 +733,8 @@ func (s *S) TestRoundTripTimeoutDial(c *check.C) {
 	defer rsp.Body.Close()
 	c.Assert(rsp.StatusCode, check.Equals, 503)
 	c.Assert(router.resultIsDead, check.Equals, true)
-	c.Assert(s.logBuffer.String(), check.Matches, `(?s).*dial timeout after .+:.*`)
-	c.Assert(s.logBuffer.String(), check.Matches, `(?s).*RID:.+.*`)
+	log.ErrorLogger.Stop()
+	c.Assert(s.logBuffer.String(), check.Matches, `(?s)ERROR in myhost.com -> http://192.0.2.1:49151 - / - RID:.+? - dial timeout after .+:.*`)
 }
 
 func waitFor(fn func()) chan struct{} {
