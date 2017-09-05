@@ -4,8 +4,8 @@ import (
 	"crypto/tls"
 	"testing"
 
+	"github.com/go-redis/redis"
 	"gopkg.in/check.v1"
-	"gopkg.in/redis.v3"
 )
 
 var rsaCertPEM = `-----BEGIN CERTIFICATE-----
@@ -58,7 +58,10 @@ func (s *S) TestRedisCertificateNotFound(c *check.C) {
 }
 
 func (s *S) TestRedisCertificateFound(c *check.C) {
-	result, err := s.redisClient.HMSet("tls:certificate.com", "certificate", rsaCertPEM, "key", rsaKeyPEM).Result()
+	result, err := s.redisClient.HMSet("tls:certificate.com", map[string]interface{}{
+		"certificate": rsaCertPEM,
+		"key":         rsaKeyPEM,
+	}).Result()
 	c.Assert(err, check.IsNil)
 	c.Assert(result, check.Equals, "OK")
 	clientHello := &tls.ClientHelloInfo{
@@ -69,7 +72,10 @@ func (s *S) TestRedisCertificateFound(c *check.C) {
 }
 
 func (s *S) TestRedisWildcardCertificateFound(c *check.C) {
-	result, err := s.redisClient.HMSet("tls:*.tsuru.io", "certificate", rsaCertPEM, "key", rsaKeyPEM).Result()
+	result, err := s.redisClient.HMSet("tls:*.tsuru.io", map[string]interface{}{
+		"certificate": rsaCertPEM,
+		"key":         rsaKeyPEM,
+	}).Result()
 	c.Assert(err, check.IsNil)
 	c.Assert(result, check.Equals, "OK")
 	clientHello := &tls.ClientHelloInfo{
@@ -80,7 +86,10 @@ func (s *S) TestRedisWildcardCertificateFound(c *check.C) {
 }
 
 func (s *S) TestRedisCertificateCached(c *check.C) {
-	result, err := s.redisClient.HMSet("tls:certificate-cached.com", "certificate", rsaCertPEM, "key", rsaKeyPEM).Result()
+	result, err := s.redisClient.HMSet("tls:certificate-cached.com", map[string]interface{}{
+		"certificate": rsaCertPEM,
+		"key":         rsaKeyPEM,
+	}).Result()
 	c.Assert(err, check.IsNil)
 	c.Assert(result, check.Equals, "OK")
 	clientHello := &tls.ClientHelloInfo{

@@ -9,10 +9,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-redis/redis"
 	"github.com/tsuru/planb/backend"
 	"github.com/tsuru/planb/reverseproxy"
 	"github.com/tsuru/planb/router"
-	"gopkg.in/redis.v3"
 )
 
 const redisDB = 5
@@ -48,12 +48,12 @@ func BenchmarkFullStackNativeRedisNoCache(b *testing.B) {
 		rw.WriteHeader(http.StatusOK)
 	}))
 	r := initTest(b)
-	backends := make([]string, 100)
+	backends := make([]interface{}, 100)
 	defer srv.Close()
 	for i := range backends {
 		backends[i] = srv.URL
 	}
-	backends = append([]string{"benchfrontend"}, backends...)
+	backends = append([]interface{}{"benchfrontend"}, backends...)
 	err := r.RPush("frontend:myfrontend.com", backends...).Err()
 	if err != nil {
 		b.Fatal(err)

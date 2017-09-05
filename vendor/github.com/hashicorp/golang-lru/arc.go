@@ -3,7 +3,7 @@ package lru
 import (
 	"sync"
 
-	"github.com/hashicorp/golang-lru/internal"
+	"github.com/hashicorp/golang-lru/simplelru"
 )
 
 // ARCCache is a thread-safe fixed size Adaptive Replacement Cache (ARC).
@@ -12,16 +12,17 @@ import (
 // entries from evicting the frequently used older entries. It adds some
 // additional tracking overhead to a standard LRU cache, computationally
 // it is roughly 2x the cost, and the extra memory overhead is linear
-// with the size of the cache.
+// with the size of the cache. ARC has been patented by IBM, but is
+// similar to the TwoQueueCache (2Q) which requires setting parameters.
 type ARCCache struct {
 	size int // Size is the total capacity of the cache
 	p    int // P is the dynamic preference towards T1 or T2
 
-	t1 *internal.LRU // T1 is the LRU for recently accessed items
-	b1 *internal.LRU // B1 is the LRU for evictions from t1
+	t1 *simplelru.LRU // T1 is the LRU for recently accessed items
+	b1 *simplelru.LRU // B1 is the LRU for evictions from t1
 
-	t2 *internal.LRU // T2 is the LRU for frequently accessed items
-	b2 *internal.LRU // B2 is the LRU for evictions from t2
+	t2 *simplelru.LRU // T2 is the LRU for frequently accessed items
+	b2 *simplelru.LRU // B2 is the LRU for evictions from t2
 
 	lock sync.RWMutex
 }
@@ -29,19 +30,19 @@ type ARCCache struct {
 // NewARC creates an ARC of the given size
 func NewARC(size int) (*ARCCache, error) {
 	// Create the sub LRUs
-	b1, err := internal.NewLRU(size, nil)
+	b1, err := simplelru.NewLRU(size, nil)
 	if err != nil {
 		return nil, err
 	}
-	b2, err := internal.NewLRU(size, nil)
+	b2, err := simplelru.NewLRU(size, nil)
 	if err != nil {
 		return nil, err
 	}
-	t1, err := internal.NewLRU(size, nil)
+	t1, err := simplelru.NewLRU(size, nil)
 	if err != nil {
 		return nil, err
 	}
-	t2, err := internal.NewLRU(size, nil)
+	t2, err := simplelru.NewLRU(size, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -11,8 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/go-redis/redis"
 	"gopkg.in/check.v1"
-	"gopkg.in/redis.v3"
 )
 
 func (s *S) TestStartMonitorNotDead(c *check.C) {
