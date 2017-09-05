@@ -67,6 +67,15 @@ func (s *LogSuite) TestNewWriterLogger(c *check.C) {
 	c.Assert(buffer.String(), check.Equals, "::ffff: - - [01/Jan/0001:00:00:00 +0000] \"  \" 0 0 \"\" \"\" \":\" \"\" 0.000 0.000\n")
 }
 
+func (s *LogSuite) TestLoggerMessageAfterStop(c *check.C) {
+	buffer := &bytes.Buffer{}
+	logger := NewWriterLogger(nopCloseWriter{buffer})
+	logger.MessageRaw(&LogEntry{})
+	logger.Stop()
+	logger.MessageRaw(&LogEntry{})
+	c.Assert(buffer.String(), check.Equals, "::ffff: - - [01/Jan/0001:00:00:00 +0000] \"  \" 0 0 \"\" \"\" \":\" \"\" 0.000 0.000\n")
+}
+
 func (s *LogSuite) TestLoggerFull(c *check.C) {
 	buffer := &bytes.Buffer{}
 	ch := make(chan time.Time)
