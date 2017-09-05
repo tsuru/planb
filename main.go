@@ -79,6 +79,7 @@ func runServer(c *cli.Context) {
 	}
 	log.Printf("Using %T engine\n", rp)
 	readOpts := backend.RedisOptions{
+		Network:       c.String("read-redis-network"),
 		Host:          c.String("read-redis-host"),
 		Port:          c.Int("read-redis-port"),
 		SentinelAddrs: c.String("read-redis-sentinel-addrs"),
@@ -87,6 +88,7 @@ func runServer(c *cli.Context) {
 		DB:            c.Int("read-redis-db"),
 	}
 	writeOpts := backend.RedisOptions{
+		Network:       c.String("write-redis-network"),
 		Host:          c.String("write-redis-host"),
 		Port:          c.Int("write-redis-port"),
 		SentinelAddrs: c.String("write-redis-sentinel-addrs"),
@@ -221,6 +223,10 @@ func main() {
 If value equals 'redis' certificate will be loaded from redis service.`,
 		},
 		cli.StringFlag{
+			Name:  "read-redis-network",
+			Value: "tcp",
+		},
+		cli.StringFlag{
 			Name:  "read-redis-host",
 			Value: "127.0.0.1",
 		},
@@ -240,6 +246,10 @@ If value equals 'redis' certificate will be loaded from redis service.`,
 		},
 		cli.IntFlag{
 			Name: "read-redis-db",
+		},
+		cli.StringFlag{
+			Name:  "write-redis-network",
+			Value: "tcp",
 		},
 		cli.StringFlag{
 			Name:  "write-redis-host",

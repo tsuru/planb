@@ -21,6 +21,7 @@ type redisBackend struct {
 }
 
 type RedisOptions struct {
+	Network       string
 	Host          string
 	Port          int
 	SentinelAddrs string
@@ -37,8 +38,15 @@ func (opts RedisOptions) Client() (*redis.Client, error) {
 		if opts.Port == 0 {
 			opts.Port = 6379
 		}
+		var addr string
+		if opts.Network == "unix" {
+			addr = opts.Host
+		} else {
+			addr = fmt.Sprintf("%s:%d", opts.Host, opts.Port)
+		}
 		return redis.NewClient(&redis.Options{
-			Addr:         fmt.Sprintf("%s:%d", opts.Host, opts.Port),
+			Network:      opts.Network,
+			Addr:         addr,
 			Password:     opts.Password,
 			DB:           int64(opts.DB),
 			MaxRetries:   maxRetries,
