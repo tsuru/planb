@@ -18,11 +18,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-redis/redis"
 	"github.com/tsuru/planb/backend"
 	"github.com/tsuru/planb/reverseproxy"
 	"github.com/tsuru/planb/router"
 	"gopkg.in/check.v1"
-	"gopkg.in/redis.v3"
 )
 
 type S struct {
@@ -31,7 +31,7 @@ type S struct {
 
 var _ = check.Suite(&S{})
 
-var redisDB int64 = 2
+var redisDB int = 2
 
 func Test(t *testing.T) {
 	check.TestingT(t)

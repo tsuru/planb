@@ -8,8 +8,8 @@ import (
 	"crypto/tls"
 	"time"
 
+	"github.com/go-redis/redis"
 	"github.com/hashicorp/golang-lru"
-	"gopkg.in/redis.v3"
 )
 
 type RedisCertificateLoader struct {

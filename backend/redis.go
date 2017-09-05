@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/redis.v3"
+	"github.com/go-redis/redis"
 )
 
 type redisBackend struct {
@@ -48,7 +48,7 @@ func (opts RedisOptions) Client() (*redis.Client, error) {
 			Network:      opts.Network,
 			Addr:         addr,
 			Password:     opts.Password,
-			DB:           int64(opts.DB),
+			DB:           opts.DB,
 			MaxRetries:   maxRetries,
 			DialTimeout:  dialTimeout,
 			ReadTimeout:  readTimeout,
@@ -72,7 +72,7 @@ func (opts RedisOptions) Client() (*redis.Client, error) {
 		MasterName:    opts.SentinelName,
 		SentinelAddrs: addrs,
 		Password:      opts.Password,
-		DB:            int64(opts.DB),
+		DB:            opts.DB,
 		MaxRetries:    maxRetries,
 		DialTimeout:   dialTimeout,
 		ReadTimeout:   readTimeout,

@@ -7,8 +7,8 @@ package backend
 import (
 	"testing"
 
+	"github.com/go-redis/redis"
 	"gopkg.in/check.v1"
-	"gopkg.in/redis.v3"
 )
 
 type S struct {
@@ -74,9 +74,8 @@ func (s *S) TestBackendsWithDead(c *check.C) {
 }
 
 func (s *S) TestMarkDead(c *check.C) {
-	pubsub, err := s.redisConn.Subscribe("dead")
-	c.Assert(err, check.IsNil)
-	err = s.be.MarkDead("f1.com", "url1", 0, 2, 30)
+	pubsub := s.redisConn.Subscribe("dead")
+	err := s.be.MarkDead("f1.com", "url1", 0, 2, 30)
 	c.Assert(err, check.IsNil)
 	members, err := s.redisConn.SMembers("dead:f1.com").Result()
 	c.Assert(err, check.IsNil)

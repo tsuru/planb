@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-redis/redis"
 	"github.com/tsuru/planb/log"
 	"github.com/tsuru/planb/reverseproxy"
 	"gopkg.in/check.v1"
-	"gopkg.in/redis.v3"
 )
 
 type S struct {
@@ -472,11 +472,11 @@ func BenchmarkChooseBackendManyNoCache(b *testing.B) {
 		b.Fatal(err)
 	}
 	defer clearKeys(r)
-	backends := make([]string, 100)
+	backends := make([]interface{}, 100)
 	for i := range backends {
 		backends[i] = "http://urlx:123"
 	}
-	backends = append([]string{"benchfrontend"}, backends...)
+	backends = append([]interface{}{"benchfrontend"}, backends...)
 	err = r.RPush("frontend:myfrontend.com", backends...).Err()
 	if err != nil {
 		b.Fatal(err)

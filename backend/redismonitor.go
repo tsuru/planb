@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"gopkg.in/redis.v3"
+	"github.com/go-redis/redis"
 )
 
 var (
@@ -67,10 +67,7 @@ func newRedisMonitor(redisClient *redis.Client) (*redisMonitor, error) {
 }
 
 func (b *redisMonitor) start() error {
-	pubsub, err := b.redisClient.Subscribe("dead")
-	if err != nil {
-		return err
-	}
+	pubsub := b.redisClient.Subscribe("dead")
 	go b.loop(pubsub)
 	return nil
 }
@@ -108,20 +105,23 @@ func (b *redisMonitor) loop(pubsub *redis.PubSub) {
 
 func (b *redisMonitor) reserve(host, backend string) bool {
 	key := "dead:" + host + ":" + backend
-	tx, err := b.redisClient.Watch(key)
+	reserved := false
+	err := b.redisClient.Watch(func(tx *redis.Tx) error {
+		watchKey := tx.Get(key).Val()
+		if watchKey != "" && watchKey != b.hostID {
+			return nil
+		}
+		_, txErr := tx.Pipelined(func(pipe redis.Pipeliner) error {
+			pipe.Set(key, b.hostID, 30*time.Second)
+			return nil
+		})
+		reserved = txErr != redis.TxFailedErr
+		return nil
+	}, key)
 	if err != nil {
 		return false
 	}
-	defer tx.Close()
-	watchKey := tx.Get(key).Val()
-	if watchKey != "" && watchKey != b.hostID {
-		return false
-	}
-	_, err = tx.Exec(func() error {
-		tx.Set(key, b.hostID, 30*time.Second)
-		return nil
-	})
-	return err != redis.TxFailedErr
+	return reserved
 }
 
 func (b *redisMonitor) free(host, backend string) {
@@ -176,39 +176,36 @@ out:
 
 func (b *redisMonitor) updateDead(host, backend string, isOk bool) error {
 	frontend := "frontend:" + host
-	tx, err := b.redisClient.Watch(frontend)
-	if err != nil {
-		return err
-	}
-	defer tx.Close()
-	entries, err := tx.LRange(frontend, 1, -1).Result()
-	if err != nil {
-		if err == redis.Nil {
+	return b.redisClient.Watch(func(tx *redis.Tx) error {
+		entries, err := tx.LRange(frontend, 1, -1).Result()
+		if err != nil {
+			if err == redis.Nil {
+				return errBackendIdxNotFound
+			}
+			return err
+		}
+		var idx string
+		for i := range entries {
+			if entries[i] == backend {
+				idx = strconv.Itoa(i)
+				break
+			}
+		}
+		if idx == "" {
 			return errBackendIdxNotFound
 		}
+		deadKey := "dead:" + host
+		_, err = tx.Pipelined(func(pipe redis.Pipeliner) error {
+			if isOk {
+				pipe.SRem(deadKey, idx)
+			} else {
+				pipe.SAdd(deadKey, idx)
+				pipe.Expire(deadKey, 30*time.Second)
+			}
+			return nil
+		})
 		return err
-	}
-	var idx string
-	for i := range entries {
-		if entries[i] == backend {
-			idx = strconv.Itoa(i)
-			break
-		}
-	}
-	if idx == "" {
-		return errBackendIdxNotFound
-	}
-	deadKey := "dead:" + host
-	_, err = tx.Exec(func() error {
-		if isOk {
-			tx.SRem(deadKey, idx)
-		} else {
-			tx.SAdd(deadKey, idx)
-			tx.Expire(deadKey, 30*time.Second)
-		}
-		return nil
-	})
-	return err
+	}, frontend)
 }
 
 type hcData struct {
@@ -218,7 +215,7 @@ type hcData struct {
 }
 
 func (b *redisMonitor) hcData(host string) (hcData, error) {
-	mapData, err := b.redisClient.HGetAllMap("healthcheck:" + host).Result()
+	mapData, err := b.redisClient.HGetAll("healthcheck:" + host).Result()
 	if err != nil && err != redis.Nil {
 		return hcData{}, err
 	}
