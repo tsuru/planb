@@ -116,6 +116,7 @@ func (rp *NativeReverseProxy) Initialize(rpConfig ReverseProxyConfig) error {
 		Dial:                rp.dialer.Dial,
 		TLSHandshakeTimeout: rp.DialTimeout,
 		MaxIdleConnsPerHost: 100,
+		DisableCompression:  true,
 	}
 	rp.rp = &httputil.ReverseProxy{
 		Director:      noopDirector,
