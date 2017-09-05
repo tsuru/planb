@@ -5,6 +5,7 @@
 package reverseproxy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -18,7 +19,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/braintree/manners"
 	"github.com/nu7hatch/gouuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tsuru/planb/log"
@@ -71,7 +71,7 @@ func init() {
 type NativeReverseProxy struct {
 	http.Transport
 	ReverseProxyConfig
-	servers []*manners.GracefulServer
+	servers []*http.Server
 	rp      *httputil.ReverseProxy
 	dialer  *net.Dialer
 }
@@ -106,7 +106,7 @@ func (p *bufferPool) Put(b []byte) {
 
 func (rp *NativeReverseProxy) Initialize(rpConfig ReverseProxyConfig) error {
 	rp.ReverseProxyConfig = rpConfig
-	rp.servers = make([]*manners.GracefulServer, 0)
+	rp.servers = make([]*http.Server, 0)
 
 	rp.dialer = &net.Dialer{
 		Timeout:   rp.DialTimeout,
@@ -128,7 +128,7 @@ func (rp *NativeReverseProxy) Initialize(rpConfig ReverseProxyConfig) error {
 }
 
 func (rp *NativeReverseProxy) Listen(listener net.Listener) {
-	server := manners.NewWithServer(&http.Server{
+	server := &http.Server{
 		ReadTimeout:       rp.ReadTimeout,
 		ReadHeaderTimeout: rp.ReadHeaderTimeout,
 		WriteTimeout:      rp.WriteTimeout,
@@ -144,14 +144,16 @@ func (rp *NativeReverseProxy) Listen(listener net.Listener) {
 				openConnections.Dec()
 			}
 		},
-	})
+	}
 	rp.servers = append(rp.servers, server)
 	server.Serve(listener)
 }
 
 func (rp *NativeReverseProxy) Stop() {
 	for _, server := range rp.servers {
-		server.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		server.Shutdown(ctx)
+		cancel()
 	}
 }
 
