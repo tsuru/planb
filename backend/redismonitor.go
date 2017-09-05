@@ -24,6 +24,8 @@ var (
 )
 
 type redisMonitor struct {
+	mu          sync.Mutex
+	reserved    map[string]struct{}
 	hostID      string
 	quit        chan struct{}
 	done        chan struct{}
@@ -42,19 +44,19 @@ func newRedisMonitor(redisClient *redis.Client) (*redisMonitor, error) {
 		quit:        make(chan struct{}),
 		done:        make(chan struct{}),
 		limiter:     make(chan struct{}, 5),
+		reserved:    make(map[string]struct{}),
 		redisClient: redisClient,
 		httpClient: &http.Client{
 			Transport: &http.Transport{
 				Dial: (&net.Dialer{
-					Timeout:   10 * time.Second,
-					KeepAlive: 10 * time.Second,
+					Timeout: 10 * time.Second,
 				}).Dial,
-				// Disable connections reuse for efective dial timeouts.
+				// Disable connections reuse for effective dial timeouts.
 				DisableKeepAlives:   true,
 				MaxIdleConnsPerHost: -1,
 				TLSHandshakeTimeout: 10 * time.Second,
 			},
-			Timeout: time.Minute,
+			Timeout: 15 * time.Second,
 		},
 	}
 	err = mon.start()
@@ -134,6 +136,19 @@ func (b *redisMonitor) watch(msg string) {
 	}
 	host := parts[0]
 	backend := parts[1]
+	localKey := host + "-" + backend
+	b.mu.Lock()
+	if _, ok := b.reserved[localKey]; ok {
+		b.mu.Unlock()
+		return
+	}
+	b.reserved[localKey] = struct{}{}
+	b.mu.Unlock()
+	defer func() {
+		b.mu.Lock()
+		delete(b.reserved, localKey)
+		b.mu.Unlock()
+	}()
 	if !b.reserve(host, backend) {
 		return
 	}
