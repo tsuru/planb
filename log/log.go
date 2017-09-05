@@ -126,7 +126,7 @@ func (l *Logger) MessageRaw(entry *LogEntry) {
 func (l *Logger) Stop() {
 	l.wg.Done()
 	l.wg.Wait()
-	close(l.logChan)
+	l.logChan <- nil
 	<-l.done
 }
 
@@ -134,6 +134,9 @@ func (l *Logger) logWriter() {
 	defer close(l.done)
 	defer l.writer.Close()
 	for el := range l.logChan {
+		if el == nil {
+			return
+		}
 		if el.Err != nil {
 			if len(el.Err.RawMsgs) > 0 {
 				fmt.Fprintln(l.writer, el.Err.RawMsgs...)
