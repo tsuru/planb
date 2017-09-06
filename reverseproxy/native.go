@@ -158,7 +158,7 @@ func (rp *NativeReverseProxy) Stop() {
 }
 
 func (rp *NativeReverseProxy) ridString(req *http.Request) string {
-	return rp.RequestIDHeader + ":" + req.Header.Get(rp.RequestIDHeader)
+	return rp.RequestIDHeader + ":" + fastHeaderGet(req.Header, rp.RequestIDHeader)
 }
 
 func (rp *NativeReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
@@ -167,13 +167,13 @@ func (rp *NativeReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Reques
 		rw.Write(okResponse)
 		return
 	}
-	if rp.RequestIDHeader != "" && req.Header.Get(rp.RequestIDHeader) == "" {
+	if rp.RequestIDHeader != "" && fastHeaderGet(req.Header, rp.RequestIDHeader) == "" {
 		unparsedID, err := uuid.NewV4()
 		if err == nil {
-			req.Header.Set(rp.RequestIDHeader, unparsedID.String())
+			fastHeaderSet(req.Header, rp.RequestIDHeader, unparsedID.String())
 		}
 	}
-	upgrade := req.Header.Get("Upgrade")
+	upgrade := fastHeaderGet(req.Header, "Upgrade")
 	if upgrade != "" && strings.ToLower(upgrade) == "websocket" {
 		reqData, err := rp.serveWebsocket(rw, req)
 		if err != nil {
@@ -214,7 +214,7 @@ func (rp *NativeReverseProxy) serveWebsocket(rw http.ResponseWriter, req *http.R
 		if prior, ok := req.Header["X-Forwarded-For"]; ok {
 			clientIP = strings.Join(prior, ", ") + ", " + clientIP
 		}
-		req.Header.Set("X-Forwarded-For", clientIP)
+		fastHeaderSet(req.Header, "X-Forwarded-For", clientIP)
 	}
 	err = req.Write(dstConn)
 	if err != nil {
@@ -263,10 +263,10 @@ func (rp *NativeReverseProxy) doResponse(req *http.Request, reqData *RequestData
 			Method:          req.Method,
 			Path:            req.URL.Path,
 			Proto:           req.Proto,
-			Referer:         req.Referer(),
-			UserAgent:       req.UserAgent(),
+			Referer:         fastHeaderGet(req.Header, "Referer"),
+			UserAgent:       fastHeaderGet(req.Header, "User-Agent"),
 			RequestIDHeader: rp.RequestIDHeader,
-			RequestID:       req.Header.Get(rp.RequestIDHeader),
+			RequestID:       fastHeaderGet(req.Header, rp.RequestIDHeader),
 			StatusCode:      rsp.StatusCode,
 			ContentLength:   rsp.ContentLength,
 		}
@@ -278,9 +278,9 @@ func (rp *NativeReverseProxy) doResponse(req *http.Request, reqData *RequestData
 		rsp.Header = http.Header{}
 	}
 	if isDebug {
-		rsp.Header.Set("X-Debug-Backend-Url", reqData.Backend)
-		rsp.Header.Set("X-Debug-Backend-Id", strconv.FormatUint(uint64(reqData.BackendIdx), 10))
-		rsp.Header.Set("X-Debug-Frontend-Key", reqData.Host)
+		fastHeaderSet(rsp.Header, "X-Debug-Backend-Url", reqData.Backend)
+		fastHeaderSet(rsp.Header, "X-Debug-Backend-Id", strconv.FormatUint(uint64(reqData.BackendIdx), 10))
+		fastHeaderSet(rsp.Header, "X-Debug-Frontend-Key", reqData.Host)
 	}
 	err := rp.Router.EndRequest(reqData, isDead, logEntry)
 	if err != nil {
@@ -293,8 +293,8 @@ func (rp *NativeReverseProxy) doResponse(req *http.Request, reqData *RequestData
 }
 
 func (rp *NativeReverseProxy) roundTripWithData(req *http.Request, reqData *RequestData, err error) (rsp *http.Response) {
-	isDebug := req.Header.Get("X-Debug-Router") != ""
-	req.Header.Del("X-Debug-Router")
+	isDebug := fastHeaderGet(req.Header, "X-Debug-Router") != ""
+	fastHeaderDel(req.Header, "X-Debug-Router")
 	if err != nil || req.URL.Scheme == "" || req.URL.Host == "" {
 		switch err {
 		case ErrAllBackendsDead:
@@ -331,8 +331,8 @@ func (rp *NativeReverseProxy) roundTripWithData(req *http.Request, reqData *Requ
 	}
 	isIP := net.ParseIP(host) != nil
 	if !isIP {
-		req.Header.Set("X-Host", req.Host)
-		req.Header.Set("X-Forwarded-Host", req.Host)
+		fastHeaderSet(req.Header, "X-Host", req.Host)
+		fastHeaderSet(req.Header, "X-Forwarded-Host", req.Host)
 		req.Host = host
 	}
 	t0 := time.Now().UTC()
@@ -365,4 +365,23 @@ func (rp *NativeReverseProxy) roundTripWithData(req *http.Request, reqData *Requ
 		}
 	}
 	return rp.doResponse(req, reqData, rsp, isDebug, markAsDead, backendDuration)
+}
+
+func fastHeaderGet(header http.Header, key string) string {
+	if header == nil {
+		return ""
+	}
+	entry := header[key]
+	if len(entry) == 0 {
+		return ""
+	}
+	return entry[0]
+}
+
+func fastHeaderSet(header http.Header, key, value string) {
+	header[key] = []string{value}
+}
+
+func fastHeaderDel(header http.Header, key string) {
+	delete(header, key)
 }

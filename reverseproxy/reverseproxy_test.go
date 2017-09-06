@@ -237,7 +237,7 @@ func (s *S) TestRoundTripWithExistingRequestID(c *check.C) {
 	defer ts.Close()
 	router := &recoderRouter{dst: ts.URL}
 	rp := s.factory()
-	err := rp.Initialize(ReverseProxyConfig{Router: router, RequestIDHeader: "X-RID"})
+	err := rp.Initialize(ReverseProxyConfig{Router: router, RequestIDHeader: "X-Rid"})
 	c.Assert(err, check.IsNil)
 	addr, listener := getFreeListener()
 	go rp.Listen(listener)
@@ -259,7 +259,7 @@ func (s *S) TestRoundTripWithExistingRequestID(c *check.C) {
 	c.Assert(receivedReq.Header.Get("X-My-Header"), check.Equals, "myvalue")
 	c.Assert(receivedReq.Header.Get("X-Host"), check.Equals, "")
 	c.Assert(receivedReq.Header.Get("X-Forwarded-Host"), check.Equals, "")
-	c.Assert(receivedReq.Header.Get("X-RID"), check.Equals, "abc")
+	c.Assert(receivedReq.Header.Get("X-Rid"), check.Equals, "abc")
 }
 
 func (s *S) TestRoundTripHostDestination(c *check.C) {

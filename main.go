@@ -118,7 +118,7 @@ func runServer(c *cli.Context) {
 	}
 	err = rp.Initialize(reverseproxy.ReverseProxyConfig{
 		Router:            &r,
-		RequestIDHeader:   c.String("request-id-header"),
+		RequestIDHeader:   http.CanonicalHeaderKey(c.String("request-id-header")),
 		FlushInterval:     time.Duration(c.Int("flush-interval")) * time.Millisecond,
 		DialTimeout:       time.Duration(c.Int("dial-timeout")) * time.Second,
 		RequestTimeout:    time.Duration(c.Int("request-timeout")) * time.Second,

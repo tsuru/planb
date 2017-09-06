@@ -141,7 +141,7 @@ func (b *redisBackend) MarkDead(host string, backend string, backendIdx int, bac
 	pipe := b.writeClient.Pipeline()
 	defer pipe.Close()
 	deadKey := "dead:" + host
-	pipe.SAdd(deadKey, strconv.Itoa(backendIdx))
+	pipe.SAdd(deadKey, backendIdx)
 	pipe.Expire(deadKey, time.Duration(deadTTL)*time.Second)
 	_, err := pipe.Exec()
 	if err != nil {
