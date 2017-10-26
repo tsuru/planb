@@ -157,6 +157,12 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 	host := string(req.Header.Host())
 	uri := req.URI()
 	if host == "__ping__" && len(uri.Path()) == 1 && uri.Path()[0] == byte('/') {
+		err := rp.Router.Healthcheck()
+		if err != nil {
+			resp.SetStatusCode(http.StatusInternalServerError)
+			resp.SetBody([]byte(err.Error()))
+			return
+		}
 		resp.SetBody(okResponse)
 		return
 	}

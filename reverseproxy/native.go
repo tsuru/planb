@@ -163,6 +163,12 @@ func (rp *NativeReverseProxy) ridString(req *http.Request) string {
 
 func (rp *NativeReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if req.Host == "__ping__" && req.URL.Path == "/" {
+		err := rp.Router.Healthcheck()
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			rw.Write([]byte(err.Error()))
+			return
+		}
 		rw.WriteHeader(http.StatusOK)
 		rw.Write(okResponse)
 		return
