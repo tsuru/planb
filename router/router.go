@@ -159,6 +159,10 @@ func (router *Router) Stop() {
 	}
 }
 
+func (router *Router) Healthcheck() error {
+	return router.Backend.Healthcheck()
+}
+
 func (router *Router) getBackends(host string) (*backendSet, error) {
 	if router.cache != nil {
 		if data, ok := router.cache.Get(host); ok {

@@ -23,6 +23,7 @@ var (
 )
 
 type Router interface {
+	Healthcheck() error
 	ChooseBackend(host string) (*RequestData, error)
 	EndRequest(reqData *RequestData, isDead bool, fn func() *log.LogEntry) error
 }

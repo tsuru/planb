@@ -116,6 +116,10 @@ func NewRedisBackend(readOpts, writeOpts RedisOptions) (RoutesBackend, error) {
 	}, nil
 }
 
+func (b *redisBackend) Healthcheck() error {
+	return b.readClient.Ping().Err()
+}
+
 func (b *redisBackend) Backends(host string) (string, []string, map[int]struct{}, error) {
 	pipe := b.readClient.Pipeline()
 	defer pipe.Close()

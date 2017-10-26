@@ -31,6 +31,10 @@ type S struct {
 
 type noopRouter struct{ dst string }
 
+func (r *noopRouter) Healthcheck() error {
+	return nil
+}
+
 func (r *noopRouter) ChooseBackend(host string) (*RequestData, error) {
 	return &RequestData{
 		Backend:    r.dst,
@@ -52,6 +56,11 @@ type recoderRouter struct {
 	resultIsDead  bool
 	logEntry      *log.LogEntry
 	errChoose     error
+	healthErr     error
+}
+
+func (r *recoderRouter) Healthcheck() error {
+	return r.healthErr
 }
 
 func (r *recoderRouter) ChooseBackend(host string) (*RequestData, error) {
@@ -603,6 +612,27 @@ func (s *S) TestRoundTripPing(c *check.C) {
 	data, err := ioutil.ReadAll(rsp.Body)
 	c.Assert(err, check.IsNil)
 	c.Assert(string(data), check.Equals, "OK")
+}
+
+func (s *S) TestRoundTripPingFailingHC(c *check.C) {
+	rp := s.factory()
+	router := &recoderRouter{healthErr: errors.New("my hc err")}
+	err := rp.Initialize(ReverseProxyConfig{Router: router})
+	c.Assert(err, check.IsNil)
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
+	defer rp.Stop()
+	defer listener.Close()
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
+	c.Assert(err, check.IsNil)
+	req.Host = "__ping__"
+	rsp, err := http.DefaultClient.Do(req)
+	c.Assert(err, check.IsNil)
+	defer rsp.Body.Close()
+	c.Assert(rsp.StatusCode, check.Equals, http.StatusInternalServerError)
+	data, err := ioutil.ReadAll(rsp.Body)
+	c.Assert(err, check.IsNil)
+	c.Assert(string(data), check.Equals, "my hc err")
 }
 
 func (s *S) TestRoundTripStreamingRequest(c *check.C) {
