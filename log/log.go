@@ -55,6 +55,7 @@ type LogEntry struct {
 	UserAgent       string
 	RequestIDHeader string
 	RequestID       string
+	ForwardedFor    string
 	StatusCode      int
 	ContentLength   int64
 	Err             *ErrEntry
@@ -158,7 +159,7 @@ func (l *Logger) logWriter() {
 			ip = "::ffff:" + ip
 		}
 		fmt.Fprintf(l.writer,
-			"%s - - [%s] \"%s %s %s\" %d %d \"%s\" \"%s\" \"%s:%s\" \"%s\" %0.3f %0.3f\n",
+			"%s - - [%s] \"%s %s %s\" %d %d \"%s\" \"%s\" \"%s:%s\" \"%s\" \"%s\" %0.3f %0.3f\n",
 			ip,
 			nowFormatted,
 			el.Method,
@@ -171,6 +172,7 @@ func (l *Logger) logWriter() {
 			el.RequestIDHeader,
 			el.RequestID,
 			el.BackendKey,
+			el.ForwardedFor,
 			float64(el.TotalDuration)/float64(time.Second),
 			float64(el.BackendDuration)/float64(time.Second),
 		)
