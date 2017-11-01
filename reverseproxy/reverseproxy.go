@@ -5,6 +5,7 @@
 package reverseproxy
 
 import (
+	"crypto/tls"
 	"errors"
 	"net"
 	"time"
@@ -30,7 +31,7 @@ type Router interface {
 
 type ReverseProxy interface {
 	Initialize(rpConfig ReverseProxyConfig) error
-	Listen(net.Listener)
+	Listen(net.Listener, *tls.Config)
 	Stop()
 }
 

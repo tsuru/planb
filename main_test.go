@@ -125,7 +125,7 @@ func (s *S) TestServeHTTPStressAllLeakDetector(c *check.C) {
 	listener, err := net.Listen("tcp", ":0")
 	c.Assert(err, check.IsNil)
 	addr := listener.Addr().String()
-	go nativeRP.Listen(listener)
+	go nativeRP.Listen(listener, nil)
 	defer nativeRP.Stop()
 	defer listener.Close()
 	nClients := 4
