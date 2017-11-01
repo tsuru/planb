@@ -6,6 +6,8 @@ package reverseproxy
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -140,10 +142,15 @@ func (s *S) TestRoundTrip(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(string(data), check.Equals, "my result")
 	c.Assert(receivedReq.Host, check.Equals, "myhost.com")
-	c.Assert(receivedReq.Header.Get("X-My-Header"), check.Equals, "myvalue")
-	c.Assert(receivedReq.Header.Get("X-Host"), check.Equals, "")
-	c.Assert(receivedReq.Header.Get("X-Forwarded-Host"), check.Equals, "")
 	c.Assert(receivedReq.Header.Get("X-RID"), check.Not(check.Equals), "")
+	delete(receivedReq.Header, "X-Rid")
+	c.Assert(receivedReq.Header, check.DeepEquals, http.Header{
+		"User-Agent":        []string{"Go-http-client/1.1"},
+		"Accept-Encoding":   []string{"gzip"},
+		"X-My-Header":       []string{"myvalue"},
+		"X-Forwarded-For":   []string{"127.0.0.1"},
+		"X-Forwarded-Proto": []string{"http"},
+	})
 	c.Assert(router.resultHost, check.Equals, "myhost.com")
 	c.Assert(router.resultReqData, check.DeepEquals, &RequestData{
 		Backend:    ts.URL,
@@ -209,10 +216,15 @@ func (s *S) TestRoundTripForwarded(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(string(data), check.Equals, "my result")
 	c.Assert(receivedReq.Host, check.Equals, "myhost.com")
-	c.Assert(receivedReq.Header.Get("X-My-Header"), check.Equals, "myvalue")
-	c.Assert(receivedReq.Header.Get("X-Host"), check.Equals, "")
-	c.Assert(receivedReq.Header.Get("X-Forwarded-Host"), check.Equals, "")
 	c.Assert(receivedReq.Header.Get("X-RID"), check.Not(check.Equals), "")
+	delete(receivedReq.Header, "X-Rid")
+	c.Assert(receivedReq.Header, check.DeepEquals, http.Header{
+		"User-Agent":        []string{"Go-http-client/1.1"},
+		"Accept-Encoding":   []string{"gzip"},
+		"X-My-Header":       []string{"myvalue"},
+		"X-Forwarded-For":   []string{"10.9.8.7, 127.0.0.1"},
+		"X-Forwarded-Proto": []string{"http"},
+	})
 	c.Assert(router.resultHost, check.Equals, "myhost.com")
 	c.Assert(router.resultReqData, check.DeepEquals, &RequestData{
 		Backend:    ts.URL,
@@ -373,9 +385,131 @@ func (s *S) TestRoundTripHostDestination(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(string(data), check.Equals, "my result")
 	c.Assert(receivedReq.Host, check.Equals, "localhost")
-	c.Assert(receivedReq.Header.Get("X-My-Header"), check.Equals, "myvalue")
-	c.Assert(receivedReq.Header.Get("X-Host"), check.Equals, "myhost.com")
-	c.Assert(receivedReq.Header.Get("X-Forwarded-Host"), check.Equals, "myhost.com")
+	c.Assert(receivedReq.Header, check.DeepEquals, http.Header{
+		"User-Agent":        []string{"Go-http-client/1.1"},
+		"Accept-Encoding":   []string{"gzip"},
+		"X-My-Header":       []string{"myvalue"},
+		"X-Forwarded-For":   []string{"127.0.0.1"},
+		"X-Forwarded-Proto": []string{"http"},
+		"X-Forwarded-Host":  []string{"myhost.com"},
+		"X-Host":            []string{"myhost.com"},
+	})
+	c.Assert(router.resultHost, check.Equals, "myhost.com")
+	c.Assert(router.resultReqData, check.DeepEquals, &RequestData{
+		Backend:    router.dst,
+		BackendIdx: 0,
+		BackendKey: "myhost.com",
+		BackendLen: 1,
+		Host:       "myhost.com",
+	})
+	c.Assert(router.resultIsDead, check.Equals, false)
+}
+
+func getFreeTLSListener() (string, net.Listener, *http.Client) {
+	localhostCert := []byte(`-----BEGIN CERTIFICATE-----
+MIICEzCCAXygAwIBAgIQMIMChMLGrR+QvmQvpwAU6zANBgkqhkiG9w0BAQsFADAS
+MRAwDgYDVQQKEwdBY21lIENvMCAXDTcwMDEwMTAwMDAwMFoYDzIwODQwMTI5MTYw
+MDAwWjASMRAwDgYDVQQKEwdBY21lIENvMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCB
+iQKBgQDuLnQAI3mDgey3VBzWnB2L39JUU4txjeVE6myuDqkM/uGlfjb9SjY1bIw4
+iA5sBBZzHi3z0h1YV8QPuxEbi4nW91IJm2gsvvZhIrCHS3l6afab4pZBl2+XsDul
+rKBxKKtD1rGxlG4LjncdabFn9gvLZad2bSysqz/qTAUStTvqJQIDAQABo2gwZjAO
+BgNVHQ8BAf8EBAMCAqQwEwYDVR0lBAwwCgYIKwYBBQUHAwEwDwYDVR0TAQH/BAUw
+AwEB/zAuBgNVHREEJzAlggtleGFtcGxlLmNvbYcEfwAAAYcQAAAAAAAAAAAAAAAA
+AAAAATANBgkqhkiG9w0BAQsFAAOBgQCEcetwO59EWk7WiJsG4x8SY+UIAA+flUI9
+tyC4lNhbcF2Idq9greZwbYCqTTTr2XiRNSMLCOjKyI7ukPoPjo16ocHj+P3vZGfs
+h1fIw3cSS2OolhloGw/XM6RWPWtPAlGykKLciQrBru5NAPvCMsb/I1DAceTiotQM
+fblo6RBxUQ==
+-----END CERTIFICATE-----`)
+	localhostKey := []byte(`-----BEGIN RSA PRIVATE KEY-----
+MIICXgIBAAKBgQDuLnQAI3mDgey3VBzWnB2L39JUU4txjeVE6myuDqkM/uGlfjb9
+SjY1bIw4iA5sBBZzHi3z0h1YV8QPuxEbi4nW91IJm2gsvvZhIrCHS3l6afab4pZB
+l2+XsDulrKBxKKtD1rGxlG4LjncdabFn9gvLZad2bSysqz/qTAUStTvqJQIDAQAB
+AoGAGRzwwir7XvBOAy5tM/uV6e+Zf6anZzus1s1Y1ClbjbE6HXbnWWF/wbZGOpet
+3Zm4vD6MXc7jpTLryzTQIvVdfQbRc6+MUVeLKwZatTXtdZrhu+Jk7hx0nTPy8Jcb
+uJqFk541aEw+mMogY/xEcfbWd6IOkp+4xqjlFLBEDytgbIECQQDvH/E6nk+hgN4H
+qzzVtxxr397vWrjrIgPbJpQvBsafG7b0dA4AFjwVbFLmQcj2PprIMmPcQrooz8vp
+jy4SHEg1AkEA/v13/5M47K9vCxmb8QeD/asydfsgS5TeuNi8DoUBEmiSJwma7FXY
+fFUtxuvL7XvjwjN5B30pNEbc6Iuyt7y4MQJBAIt21su4b3sjXNueLKH85Q+phy2U
+fQtuUE9txblTu14q3N7gHRZB4ZMhFYyDy8CKrN2cPg/Fvyt0Xlp/DoCzjA0CQQDU
+y2ptGsuSmgUtWj3NM9xuwYPm+Z/F84K6+ARYiZ6PYj013sovGKUFfYAqVXVlxtIX
+qyUBnu3X9ps8ZfjLZO7BAkEAlT4R5Yl6cGhaJQYZHOde3JEMhNRcVFMO8dJDaFeo
+f9Oeos0UUothgiDktdQHxdNEwLjQf7lJJBzV+5OtwswCWA==
+-----END RSA PRIVATE KEY-----`)
+	cert, err := tls.X509KeyPair(localhostCert, localhostKey)
+	if err != nil {
+		stdlog.Fatal(err)
+	}
+	tlsConfig := &tls.Config{
+		PreferServerCipherSuites: true,
+		CurvePreferences: []tls.CurveID{
+			tls.CurveP256,
+		},
+		MinVersion: tls.VersionTLS12,
+		CipherSuites: []uint16{
+			tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+			tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+			tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+		},
+		Certificates: []tls.Certificate{cert},
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		stdlog.Fatal(err)
+	}
+	certificate, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		stdlog.Fatal(err)
+	}
+	certpool := x509.NewCertPool()
+	certpool.AddCert(certificate)
+	client := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: certpool,
+			},
+		},
+	}
+	return listener.Addr().String(), tls.NewListener(listener, tlsConfig), client
+}
+
+func (s *S) TestRoundTripTLSListener(c *check.C) {
+	var receivedReq *http.Request
+	ts := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		receivedReq = req
+		rw.WriteHeader(200)
+		rw.Write([]byte("my result"))
+	}))
+	defer ts.Close()
+	router := &recoderRouter{dst: ts.URL}
+	rp := s.factory()
+	err := rp.Initialize(ReverseProxyConfig{Router: router})
+	c.Assert(err, check.IsNil)
+	addr, listener, client := getFreeTLSListener()
+	go rp.Listen(listener)
+	defer rp.Stop()
+	defer listener.Close()
+	req, err := http.NewRequest("GET", fmt.Sprintf("https://%s/", addr), nil)
+	c.Assert(err, check.IsNil)
+	req.Host = "myhost.com"
+	req.Header.Set("X-My-Header", "myvalue")
+	rsp, err := client.Do(req)
+	c.Assert(err, check.IsNil)
+	defer rsp.Body.Close()
+	c.Assert(rsp.StatusCode, check.Equals, 200)
+	data, err := ioutil.ReadAll(rsp.Body)
+	c.Assert(err, check.IsNil)
+	c.Assert(string(data), check.Equals, "my result")
+	c.Assert(receivedReq.Host, check.Equals, "myhost.com")
+	c.Assert(receivedReq.Header, check.DeepEquals, http.Header{
+		"User-Agent":        []string{"Go-http-client/1.1"},
+		"Accept-Encoding":   []string{"gzip"},
+		"X-My-Header":       []string{"myvalue"},
+		"X-Forwarded-For":   []string{"127.0.0.1"},
+		"X-Forwarded-Proto": []string{"https"},
+	})
 	c.Assert(router.resultHost, check.Equals, "myhost.com")
 	c.Assert(router.resultReqData, check.DeepEquals, &RequestData{
 		Backend:    router.dst,

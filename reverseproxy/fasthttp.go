@@ -242,6 +242,13 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 		req.Header.SetBytesV("X-Forwarded-Host", uri.Host())
 		uri.SetHost(hostOnly)
 	}
+	if len(req.Header.Peek("X-Forwarded-Proto")) == 0 {
+		proto := "http"
+		if ctx.IsTLS() {
+			proto = "https"
+		}
+		req.Header.Set("X-Forwarded-Proto", proto)
+	}
 	client := rp.getClient(dstHost, dstScheme == "https")
 	t0 := time.Now().UTC()
 	err = client.Do(req, resp)
