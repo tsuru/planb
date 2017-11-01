@@ -173,6 +173,76 @@ func (s *S) TestRoundTrip(c *check.C) {
 		RequestIDHeader: "X-RID",
 		StatusCode:      200,
 		ContentLength:   9,
+		ForwardedFor:    "",
+	})
+	c.Assert(router.resultIsDead, check.Equals, false)
+}
+
+func (s *S) TestRoundTripForwarded(c *check.C) {
+	var receivedReq *http.Request
+	ts := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		receivedReq = req
+		rw.Header().Set("X-Some-Rsp-Header", "rspvalue")
+		rw.WriteHeader(200)
+		rw.Write([]byte("my result"))
+	}))
+	defer ts.Close()
+	router := &recoderRouter{dst: ts.URL}
+	rp := s.factory()
+	err := rp.Initialize(ReverseProxyConfig{Router: router, RequestIDHeader: "X-RID"})
+	c.Assert(err, check.IsNil)
+	addr, listener := getFreeListener()
+	go rp.Listen(listener)
+	defer rp.Stop()
+	defer listener.Close()
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/", addr), nil)
+	c.Assert(err, check.IsNil)
+	req.Host = "myhost.com"
+	req.Header.Set("X-My-Header", "myvalue")
+	req.Header.Set("X-Forwarded-For", "10.9.8.7")
+	rsp, err := http.DefaultClient.Do(req)
+	c.Assert(err, check.IsNil)
+	defer rsp.Body.Close()
+	c.Assert(rsp.StatusCode, check.Equals, 200)
+	c.Assert(rsp.Header.Get("X-Some-Rsp-Header"), check.Equals, "rspvalue")
+	data, err := ioutil.ReadAll(rsp.Body)
+	c.Assert(err, check.IsNil)
+	c.Assert(string(data), check.Equals, "my result")
+	c.Assert(receivedReq.Host, check.Equals, "myhost.com")
+	c.Assert(receivedReq.Header.Get("X-My-Header"), check.Equals, "myvalue")
+	c.Assert(receivedReq.Header.Get("X-Host"), check.Equals, "")
+	c.Assert(receivedReq.Header.Get("X-Forwarded-Host"), check.Equals, "")
+	c.Assert(receivedReq.Header.Get("X-RID"), check.Not(check.Equals), "")
+	c.Assert(router.resultHost, check.Equals, "myhost.com")
+	c.Assert(router.resultReqData, check.DeepEquals, &RequestData{
+		Backend:    ts.URL,
+		BackendIdx: 0,
+		BackendKey: "myhost.com",
+		BackendLen: 1,
+		Host:       "myhost.com",
+	})
+	le := router.logEntry
+	c.Assert(le.Now.IsZero(), check.Equals, false)
+	c.Assert(le.BackendDuration, check.Not(check.Equals), 0)
+	c.Assert(le.TotalDuration, check.Not(check.Equals), 0)
+	c.Assert(le.RequestID, check.Not(check.Equals), "")
+	c.Assert(le.RemoteAddr, check.Matches, `127\.0\.0\.1:\d+`)
+	le.Now = time.Time{}
+	le.BackendDuration = 0
+	le.TotalDuration = 0
+	le.RequestID = ""
+	le.RemoteAddr = ""
+	c.Assert(le, check.DeepEquals, &log.LogEntry{
+		BackendKey:      "myhost.com",
+		Method:          "GET",
+		Path:            "/",
+		Proto:           "HTTP/1.1",
+		Referer:         "",
+		UserAgent:       "Go-http-client/1.1",
+		RequestIDHeader: "X-RID",
+		StatusCode:      200,
+		ContentLength:   9,
+		ForwardedFor:    "10.9.8.7",
 	})
 	c.Assert(router.resultIsDead, check.Equals, false)
 }

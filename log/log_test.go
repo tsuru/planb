@@ -42,7 +42,7 @@ func (s *LogSuite) TestNewFileLogger(c *check.C) {
 	logger.Stop()
 	data, err := ioutil.ReadFile(fileName)
 	c.Assert(err, check.IsNil)
-	c.Assert(string(data), check.Equals, "::ffff: - - [01/Jan/0001:00:00:00 +0000] \"  \" 0 0 \"\" \"\" \":\" \"\" 0.000 0.000\n")
+	c.Assert(string(data), check.Equals, "::ffff: - - [01/Jan/0001:00:00:00 +0000] \"  \" 0 0 \"\" \"\" \":\" \"\" \"\" 0.000 0.000\n")
 }
 
 func (s *LogSuite) TestNewSyslogLogger(c *check.C) {
@@ -64,7 +64,7 @@ func (s *LogSuite) TestNewWriterLogger(c *check.C) {
 	logger := NewWriterLogger(nopCloseWriter{buffer})
 	logger.MessageRaw(&LogEntry{})
 	logger.Stop()
-	c.Assert(buffer.String(), check.Equals, "::ffff: - - [01/Jan/0001:00:00:00 +0000] \"  \" 0 0 \"\" \"\" \":\" \"\" 0.000 0.000\n")
+	c.Assert(buffer.String(), check.Equals, "::ffff: - - [01/Jan/0001:00:00:00 +0000] \"  \" 0 0 \"\" \"\" \":\" \"\" \"\" 0.000 0.000\n")
 }
 
 func (s *LogSuite) TestLoggerMessageAfterStop(c *check.C) {
@@ -73,7 +73,7 @@ func (s *LogSuite) TestLoggerMessageAfterStop(c *check.C) {
 	logger.MessageRaw(&LogEntry{})
 	logger.Stop()
 	logger.MessageRaw(&LogEntry{})
-	c.Assert(buffer.String(), check.Equals, "::ffff: - - [01/Jan/0001:00:00:00 +0000] \"  \" 0 0 \"\" \"\" \":\" \"\" 0.000 0.000\n")
+	c.Assert(buffer.String(), check.Equals, "::ffff: - - [01/Jan/0001:00:00:00 +0000] \"  \" 0 0 \"\" \"\" \":\" \"\" \"\" 0.000 0.000\n")
 }
 
 func (s *LogSuite) TestLoggerFull(c *check.C) {
@@ -94,7 +94,7 @@ func (s *LogSuite) TestLoggerFull(c *check.C) {
 	logger.MessageRaw(&LogEntry{})
 	go logger.logWriter()
 	logger.Stop()
-	c.Assert(buffer.String(), check.Equals, `::ffff: - - [01/Jan/0001:00:00:00 +0000] "  " 0 0 "" "" ":" "" 0.000 0.000
+	c.Assert(buffer.String(), check.Equals, `::ffff: - - [01/Jan/0001:00:00:00 +0000] "  " 0 0 "" "" ":" "" "" 0.000 0.000
 Dropping log messages to due to full channel buffer.
 `)
 }

@@ -400,7 +400,7 @@ func (s *S) TestEndRequestWithLogFunc(c *check.C) {
 	members := s.redis.SMembers("dead:myfe.com").Val()
 	c.Assert(members, check.DeepEquals, []string{})
 	router.Stop()
-	c.Assert(buf.String(), check.Equals, "::ffff: - - [01/Jan/0001:00:00:00 +0000] \"  \" 0 0 \"\" \"\" \":\" \"\" 0.000 0.000\n")
+	c.Assert(buf.String(), check.Equals, "::ffff: - - [01/Jan/0001:00:00:00 +0000] \"  \" 0 0 \"\" \"\" \":\" \"\" \"\" 0.000 0.000\n")
 }
 
 func (s *S) TestEndRequestWithError(c *check.C) {

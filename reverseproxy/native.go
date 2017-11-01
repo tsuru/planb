@@ -188,6 +188,7 @@ func (rp *NativeReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Reques
 		}
 		return
 	}
+	req.Header["Planb-X-Forwarded-For"] = req.Header["X-Forwarded-For"]
 	rp.rp.ServeHTTP(rw, req)
 }
 
@@ -257,7 +258,7 @@ func (rp *NativeReverseProxy) RoundTrip(req *http.Request) (*http.Response, erro
 	return rp.roundTripWithData(req, reqData, nil), nil
 }
 
-func (rp *NativeReverseProxy) doResponse(req *http.Request, reqData *RequestData, rsp *http.Response, isDebug bool, isDead bool, backendDuration time.Duration) *http.Response {
+func (rp *NativeReverseProxy) doResponse(req *http.Request, reqData *RequestData, rsp *http.Response, isDebug bool, isDead bool, backendDuration time.Duration, originalForwardedFor string) *http.Response {
 	totalDuration := time.Since(reqData.StartTime)
 	logEntry := func() *log.LogEntry {
 		return &log.LogEntry{
@@ -275,6 +276,7 @@ func (rp *NativeReverseProxy) doResponse(req *http.Request, reqData *RequestData
 			RequestID:       fastHeaderGet(req.Header, rp.RequestIDHeader),
 			StatusCode:      rsp.StatusCode,
 			ContentLength:   rsp.ContentLength,
+			ForwardedFor:    originalForwardedFor,
 		}
 	}
 	rsp.Request = req
@@ -301,6 +303,8 @@ func (rp *NativeReverseProxy) doResponse(req *http.Request, reqData *RequestData
 func (rp *NativeReverseProxy) roundTripWithData(req *http.Request, reqData *RequestData, err error) (rsp *http.Response) {
 	isDebug := fastHeaderGet(req.Header, "X-Debug-Router") != ""
 	fastHeaderDel(req.Header, "X-Debug-Router")
+	originalForwardedFor := fastHeaderGet(req.Header, "Planb-X-Forwarded-For")
+	fastHeaderDel(req.Header, "Planb-X-Forwarded-For")
 	if err != nil || req.URL.Scheme == "" || req.URL.Host == "" {
 		switch err {
 		case ErrAllBackendsDead:
@@ -321,7 +325,7 @@ func (rp *NativeReverseProxy) roundTripWithData(req *http.Request, reqData *Requ
 				Body:       emptyResponseBody,
 			}
 		}
-		return rp.doResponse(req, reqData, rsp, isDebug, false, 0)
+		return rp.doResponse(req, reqData, rsp, isDebug, false, 0, originalForwardedFor)
 	}
 	var timedout int32
 	if rp.RequestTimeout > 0 {
@@ -370,7 +374,7 @@ func (rp *NativeReverseProxy) roundTripWithData(req *http.Request, reqData *Requ
 			Body:       emptyResponseBody,
 		}
 	}
-	return rp.doResponse(req, reqData, rsp, isDebug, markAsDead, backendDuration)
+	return rp.doResponse(req, reqData, rsp, isDebug, markAsDead, backendDuration, originalForwardedFor)
 }
 
 func fastHeaderGet(header http.Header, key string) string {

@@ -102,13 +102,6 @@ func (rp *FastReverseProxy) serveWebsocket(dstHost string, reqData *RequestData,
 		reqData.logError(string(uri.Path()), rp.ridString(req), err)
 		return
 	}
-	var clientIP string
-	if clientIP, _, err = net.SplitHostPort(ctx.RemoteAddr().String()); err == nil {
-		if prior := string(req.Header.Peek("X-Forwarded-For")); len(prior) > 0 {
-			clientIP = prior + ", " + clientIP
-		}
-		req.Header.Set("X-Forwarded-For", clientIP)
-	}
 	_, err = req.WriteTo(dstConn)
 	if err != nil {
 		reqData.logError(string(uri.Path()), rp.ridString(req), err)
@@ -173,6 +166,15 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 			req.Header.Set(rp.RequestIDHeader, unparsedID.String())
 		}
 	}
+	originalForwardedFor := string(req.Header.Peek("X-Forwarded-For"))
+	var clientIP string
+	var err error
+	if clientIP, _, err = net.SplitHostPort(ctx.RemoteAddr().String()); err == nil {
+		if len(originalForwardedFor) > 0 {
+			clientIP = originalForwardedFor + ", " + clientIP
+		}
+		req.Header.Set("X-Forwarded-For", clientIP)
+	}
 	reqData, dstScheme, dstHost, err := rp.chooseBackend(host)
 	logEntry := func() *log.LogEntry {
 		proto := "HTTP/1.0"
@@ -194,6 +196,7 @@ func (rp *FastReverseProxy) handler(ctx *fasthttp.RequestCtx) {
 			RequestID:       string(req.Header.Peek(rp.RequestIDHeader)),
 			StatusCode:      resp.StatusCode(),
 			ContentLength:   int64(resp.Header.ContentLength()),
+			ForwardedFor:    originalForwardedFor,
 		}
 	}
 	isDebug := len(req.Header.Peek("X-Debug-Router")) > 0
