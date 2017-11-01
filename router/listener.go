@@ -30,16 +30,17 @@ func (r *RouterListener) Serve() {
 		r.listeners = append(r.listeners, listener)
 
 		log.Printf("Listening on %s...\n", listener.Addr().String())
-		go r.listen(listener)
+		go r.listen(listener, nil)
 	}
 
 	if r.TLSListen != "" {
 		r.wg.Add(1)
-		listener = r.tlsListener()
+		var tlsConfig *stdtls.Config
+		listener, tlsConfig = r.tlsListener()
 		r.listeners = append(r.listeners, listener)
 
 		log.Printf("Listening tls on %s...\n", listener.Addr().String())
-		go r.listen(listener)
+		go r.listen(listener, tlsConfig)
 	}
 
 	r.wg.Wait()
@@ -62,7 +63,7 @@ func (r *RouterListener) tcpListener() net.Listener {
 	return listener
 }
 
-func (r *RouterListener) tlsListener() net.Listener {
+func (r *RouterListener) tlsListener() (net.Listener, *stdtls.Config) {
 	tlsConfig := &stdtls.Config{
 		PreferServerCipherSuites: true,
 		CurvePreferences: []stdtls.CurveID{
@@ -78,16 +79,18 @@ func (r *RouterListener) tlsListener() net.Listener {
 			stdtls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 		},
 		GetCertificate: r.CertLoader.GetCertificate,
+		// Enable automatically upgrading connection to http2.
+		NextProtos: []string{"h2"},
 	}
 	listener, err := net.Listen("tcp", r.TLSListen)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return stdtls.NewListener(listener, tlsConfig)
+	return stdtls.NewListener(listener, tlsConfig), tlsConfig
 }
 
-func (r *RouterListener) listen(listener net.Listener) {
-	r.ReverseProxy.Listen(listener)
+func (r *RouterListener) listen(listener net.Listener, tlsConfig *stdtls.Config) {
+	r.ReverseProxy.Listen(listener, tlsConfig)
 	listener.Close()
 	r.wg.Done()
 }

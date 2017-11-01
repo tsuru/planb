@@ -6,6 +6,7 @@ package reverseproxy
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -127,13 +128,14 @@ func (rp *NativeReverseProxy) Initialize(rpConfig ReverseProxyConfig) error {
 	return nil
 }
 
-func (rp *NativeReverseProxy) Listen(listener net.Listener) {
+func (rp *NativeReverseProxy) Listen(listener net.Listener, tlsConfig *tls.Config) {
 	server := &http.Server{
 		ReadTimeout:       rp.ReadTimeout,
 		ReadHeaderTimeout: rp.ReadHeaderTimeout,
 		WriteTimeout:      rp.WriteTimeout,
 		IdleTimeout:       rp.IdleTimeout,
 		Handler:           rp,
+		TLSConfig:         tlsConfig,
 		ConnState: func(c net.Conn, s http.ConnState) {
 			switch s {
 			case http.StateNew:

@@ -6,6 +6,7 @@ package reverseproxy
 
 import (
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -45,7 +46,7 @@ func (rp *FastReverseProxy) Initialize(rpConfig ReverseProxyConfig) error {
 	return nil
 }
 
-func (rp *FastReverseProxy) Listen(listener net.Listener) {
+func (rp *FastReverseProxy) Listen(listener net.Listener, tlsConfig *tls.Config) {
 	rp.server.Serve(listener)
 }
 

@@ -5,6 +5,7 @@
 package reverseproxy
 
 import (
+	"crypto/tls"
 	"io"
 	"net"
 	"net/url"
@@ -30,7 +31,7 @@ func (rp *SNIReverseProxy) Stop() {
 }
 
 // Listen is public interface used in router/listener.go
-func (rp *SNIReverseProxy) Listen(listener net.Listener) {
+func (rp *SNIReverseProxy) Listen(listener net.Listener, tlsConfig *tls.Config) {
 	for {
 		connection, err := listener.Accept()
 		connID, _ := uuid.NewV4()

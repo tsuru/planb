@@ -84,7 +84,7 @@ func BenchmarkFullStackNativeRedisNoCache(b *testing.B) {
 		b.Fatal(err)
 	}
 	url := fmt.Sprintf("http://%s/", listener.Addr().String())
-	go rp.Listen(listener)
+	go rp.Listen(listener, nil)
 	defer rp.Stop()
 	cli := &http.Client{
 		Transport: &http.Transport{
