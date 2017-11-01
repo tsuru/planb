@@ -336,7 +336,7 @@ The value 'none' can be used to disable access logs.`,
 			Usage: "Enable caching backend results for 2 seconds. This may cause temporary inconsistencies.",
 		},
 	}
-	app.Version = "0.1.14"
+	app.Version = "0.1.15"
 	app.Name = "planb"
 	app.Usage = "http and websockets reverse proxy"
 	app.Action = runServer
