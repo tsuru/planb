@@ -345,6 +345,13 @@ func (rp *NativeReverseProxy) roundTripWithData(req *http.Request, reqData *Requ
 		fastHeaderSet(req.Header, "X-Forwarded-Host", req.Host)
 		req.Host = host
 	}
+	if fastHeaderGet(req.Header, "X-Forwarded-Proto") == "" {
+		proto := "http"
+		if req.TLS != nil {
+			proto = "https"
+		}
+		fastHeaderSet(req.Header, "X-Forwarded-Proto", proto)
+	}
 	t0 := time.Now().UTC()
 	rsp, err = rp.Transport.RoundTrip(req)
 	backendDuration := time.Since(t0)
