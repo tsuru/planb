@@ -126,6 +126,7 @@ func runServer(c *cli.Context) {
 		ReadHeaderTimeout: c.Duration("client-read-header-timeout"),
 		WriteTimeout:      c.Duration("client-write-timeout"),
 		IdleTimeout:       c.Duration("client-idle-timeout"),
+		ProxyProtocol:     c.Bool("proxy-protocol"),
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -330,6 +331,10 @@ The value 'none' can be used to disable access logs.`,
 			Name:  "engine",
 			Value: "native",
 			Usage: "Reverse proxy engine, options are 'native', 'sni' and 'fasthttp'. Using 'sni' and 'fasthttp' is highly experimental and not recommended for production environments.",
+		},
+		cli.BoolFlag{
+			Name:  "proxy-protocol",
+			Usage: "Enable parsing HAProxy's PROXY protocol v2 header in tcp connections.",
 		},
 		cli.BoolFlag{
 			Name:  "backend-cache",

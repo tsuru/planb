@@ -72,9 +72,11 @@ func init() {
 type NativeReverseProxy struct {
 	http.Transport
 	ReverseProxyConfig
-	servers []*http.Server
-	rp      *httputil.ReverseProxy
-	dialer  *net.Dialer
+	servers   []*http.Server
+	rp        *httputil.ReverseProxy
+	dialer    *net.Dialer
+	mu        sync.RWMutex
+	remoteMap map[string]string
 }
 
 type fixedReadCloser struct {
@@ -108,6 +110,9 @@ func (p *bufferPool) Put(b []byte) {
 func (rp *NativeReverseProxy) Initialize(rpConfig ReverseProxyConfig) error {
 	rp.ReverseProxyConfig = rpConfig
 	rp.servers = make([]*http.Server, 0)
+	if rpConfig.ProxyProtocol {
+		rp.remoteMap = make(map[string]string)
+	}
 
 	rp.dialer = &net.Dialer{
 		Timeout:   rp.DialTimeout,
@@ -139,11 +144,24 @@ func (rp *NativeReverseProxy) Listen(listener net.Listener, tlsConfig *tls.Confi
 		ConnState: func(c net.Conn, s http.ConnState) {
 			switch s {
 			case http.StateNew:
+				if rp.remoteMap != nil {
+					remoteAddr, err := readProxyProtoV2Header(c)
+					if err == nil {
+						rp.mu.Lock()
+						rp.remoteMap[c.RemoteAddr().String()] = remoteAddr
+						rp.mu.Unlock()
+					}
+				}
 				openConnections.Inc()
 			case http.StateHijacked:
-				openConnections.Dec()
+				fallthrough
 			case http.StateClosed:
 				openConnections.Dec()
+				if rp.remoteMap != nil {
+					rp.mu.Lock()
+					delete(rp.remoteMap, c.RemoteAddr().String())
+					rp.mu.Unlock()
+				}
 			}
 		},
 	}
@@ -263,12 +281,20 @@ func (rp *NativeReverseProxy) RoundTrip(req *http.Request) (*http.Response, erro
 func (rp *NativeReverseProxy) doResponse(req *http.Request, reqData *RequestData, rsp *http.Response, isDebug bool, isDead bool, backendDuration time.Duration, originalForwardedFor string) *http.Response {
 	totalDuration := time.Since(reqData.StartTime)
 	logEntry := func() *log.LogEntry {
+		remoteAddr := req.RemoteAddr
+		if rp.remoteMap != nil {
+			rp.mu.RLock()
+			if remoteFromMap, ok := rp.remoteMap[req.RemoteAddr]; ok {
+				remoteAddr = remoteFromMap
+			}
+			rp.mu.RUnlock()
+		}
 		return &log.LogEntry{
 			Now:             time.Now(),
 			BackendDuration: backendDuration,
 			TotalDuration:   totalDuration,
 			BackendKey:      reqData.BackendKey,
-			RemoteAddr:      req.RemoteAddr,
+			RemoteAddr:      remoteAddr,
 			Method:          req.Method,
 			Path:            req.URL.Path,
 			Proto:           req.Proto,
