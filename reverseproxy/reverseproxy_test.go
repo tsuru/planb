@@ -726,7 +726,7 @@ func (s *S) TestRoundTripStress(c *check.C) {
 	defer ts.Close()
 	router := &noopRouter{dst: ts.URL}
 	rp := s.factory()
-	err := rp.Initialize(ReverseProxyConfig{Router: router})
+	err := rp.Initialize(ReverseProxyConfig{Router: router, ReadTimeout: time.Second})
 	c.Assert(err, check.IsNil)
 	addr, listener := getFreeListener()
 	go rp.Listen(listener, nil)
@@ -763,7 +763,7 @@ func (s *S) TestRoundTripStress(c *check.C) {
 func (s *S) TestRoundTripStressWithTimeoutBackend(c *check.C) {
 	router := &noopRouter{dst: "http://127.0.0.1:23771"}
 	rp := s.factory()
-	err := rp.Initialize(ReverseProxyConfig{Router: router})
+	err := rp.Initialize(ReverseProxyConfig{Router: router, ReadTimeout: time.Second})
 	c.Assert(err, check.IsNil)
 	addr, listener := getFreeListener()
 	go rp.Listen(listener, nil)
@@ -1041,7 +1041,7 @@ func baseBenchmarkServeHTTP(rp ReverseProxy, b *testing.B) {
 		rw.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
-	err := rp.Initialize(ReverseProxyConfig{Router: &noopRouter{dst: srv.URL}})
+	err := rp.Initialize(ReverseProxyConfig{Router: &noopRouter{dst: srv.URL}, ReadTimeout: time.Second})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -1071,7 +1071,7 @@ func baseBenchmarkServeHTTP(rp ReverseProxy, b *testing.B) {
 
 func baseBenchmarkServeHTTPInvalidFrontends(rp ReverseProxy, b *testing.B) {
 	addr, listener := getFreeListener()
-	err := rp.Initialize(ReverseProxyConfig{Router: &noopRouter{}})
+	err := rp.Initialize(ReverseProxyConfig{Router: &noopRouter{}, ReadTimeout: time.Second})
 	if err != nil {
 		b.Fatal(err)
 	}
