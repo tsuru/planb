@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/codegangsta/cli"
+	"github.com/google/gops/agent"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tsuru/planb/backend"
 	"github.com/tsuru/planb/reverseproxy"
@@ -33,6 +34,7 @@ func handleSignals(server interface {
 		for sig := range sigChan {
 			if sig == os.Interrupt || sig == os.Kill {
 				server.Stop()
+				agent.Close()
 			}
 			if sig == syscall.SIGUSR1 {
 				pprof.Lookup("goroutine").WriteTo(os.Stdout, 2)
@@ -66,6 +68,11 @@ func startProfiling() {
 }
 
 func runServer(c *cli.Context) {
+	err := agent.Listen(agent.Options{})
+	if err != nil {
+		log.Printf("Unable to start gops agent: %v", err)
+	}
+
 	var rp reverseproxy.ReverseProxy
 	switch c.String("engine") {
 	case "native":
