@@ -6,6 +6,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -142,6 +143,7 @@ func runServer(c *cli.Context) {
 		ReverseProxy: rp,
 		Listen:       c.String("listen"),
 		TLSListen:    c.String("tls-listen"),
+		TLSPreset:    c.String("tls-preset"),
 		CertLoader:   getCertificateLoader(c, readOpts),
 	}
 
@@ -218,6 +220,12 @@ func main() {
 		cli.StringFlag{
 			Name:  "tls-listen",
 			Usage: "Address to listen with tls",
+		},
+		cli.StringFlag{
+			Name: "tls-preset",
+			Usage: fmt.Sprintf(`Preset containing supported TLS versions and cyphers, according to https://wiki.mozilla.org/Security/Server_Side_TLS.
+Possible values are [%s, %s, %s]`, router.TLS_PRESET_MODERN, router.TLS_PRESET_INTERMEDIATE, router.TLS_PRESET_OLD),
+			Value: router.TLS_PRESET_MODERN,
 		},
 		cli.StringFlag{
 			Name:  "metrics-address",
