@@ -240,52 +240,64 @@ If value equals 'redis' certificate will be loaded from redis service.`,
 		cli.StringFlag{
 			Name:  "read-redis-network",
 			Value: "tcp",
+			Usage: "Redis address network, possible values are \"tcp\" for tcp connection and \"unix\" for connecting using unix sockets",
 		},
 		cli.StringFlag{
 			Name:  "read-redis-host",
 			Value: "127.0.0.1",
+			Usage: "Redis host address for tcp connections or socket path for unix sockets",
 		},
 		cli.IntFlag{
 			Name:  "read-redis-port",
 			Value: 6379,
+			Usage: "Redis port",
 		},
 		cli.StringFlag{
 			Name:  "read-redis-sentinel-addrs",
-			Usage: "Comma separated list of redis addresses",
+			Usage: "Comma separated list of redis sentinel addresses",
 		},
 		cli.StringFlag{
-			Name: "read-redis-sentinel-name",
+			Name:  "read-redis-sentinel-name",
+			Usage: "Redis sentinel name",
 		},
 		cli.StringFlag{
-			Name: "read-redis-password",
+			Name:  "read-redis-password",
+			Usage: "Redis password",
 		},
 		cli.IntFlag{
-			Name: "read-redis-db",
+			Name:  "read-redis-db",
+			Usage: "Redis database number",
 		},
 		cli.StringFlag{
 			Name:  "write-redis-network",
 			Value: "tcp",
+			Usage: "Redis address network, possible values are \"tcp\" for tcp connection and \"unix\" for connecting using unix sockets",
 		},
 		cli.StringFlag{
 			Name:  "write-redis-host",
 			Value: "127.0.0.1",
+			Usage: "Redis host address for tcp connections or socket path for unix sockets",
 		},
 		cli.IntFlag{
 			Name:  "write-redis-port",
 			Value: 6379,
+			Usage: "Redis port",
 		},
 		cli.StringFlag{
 			Name:  "write-redis-sentinel-addrs",
-			Usage: "Comma separated list of redis addresses",
+			Usage: "Comma separated list of redis sentinel addresses",
 		},
 		cli.StringFlag{
-			Name: "write-redis-sentinel-name",
+			Name:  "write-redis-sentinel-name",
+			Usage: "Redis sentinel name",
 		},
 		cli.StringFlag{
-			Name: "write-redis-password",
+			Name:  "write-redis-password",
+			Usage: "Redis password",
 		},
 		cli.IntFlag{
-			Name: "write-redis-db",
+			Name:  "write-redis-db",
+			Usage: "Redis database number",
 		},
 		cli.StringFlag{
 			Name:  "access-log",
@@ -339,7 +351,8 @@ The value 'none' can be used to disable access logs.`,
 			Usage: "Header to enable message tracking",
 		},
 		cli.BoolFlag{
-			Name: "active-healthcheck",
+			Name:  "active-healthcheck",
+			Usage: "Enable active healthcheck on dead backends once they are marked as dead. Enabling this flag will result in dead backends only being enabled again once the active healthcheck routine is able to reach them.",
 		},
 		cli.StringFlag{
 			Name:  "engine",

@@ -16,45 +16,74 @@ replacing Hipache's executable for PlanB.
 
 The following flags are available for configuring PlanB on start-up:
 
-- ``--listen/-l``: the address to which PlanB will bind. Default value is
-  ``0.0.0.0:8989``, if you want to disable http access use `disabled`.
-- ``--tls-listen``: the address to which PlanB will bind with tls support.
-- ``--load-certificates-from``: Path where certificate will found. If value
-  equals 'redis' certificate will be loaded from redis service. Default value
-  is ``redis``.
-- ``--metrics-address``: the address to which PlanB will expose a `/metrics` endpoint
-  compatible with Prometheus.
-- ``--read-redis-host``: Redis host of the server which contains application
-  addresses. Default value is ``localhost``.
-- ``--read-redis-port``: Redis port of the server which contains application
-  addresses. Default value is ``6379``.
-- ``--read-redis-password``: Redis password of the server which contains application
-  addresses. If not defined, no authentication will be performed.
-- ``--write-redis-host``: Redis host of the server which PlanB will use for
-  publishing dead backends. Default value is ``localhost``.
-- ``--write-redis-port``: Redis port of the server which which PlanB will use
-  for publishing dead backends. Default value is ``6379``.
-- ``--write-redis-password``: Redis password of the server which which PlanB will use
-  for publishing dead backends. If not defined, no authentication will be performed.
-- ``--access-log``: File path where access log will be written. If value equals
-  ``syslog`` log will be sent to local syslog. If value equals ``stdout`` log will
-  be sent to stdout. Default value is ``./access.log``.
-- ``--request-timeout``: Total backend request timeout in seconds. Default
-  value is ``30``.
-- ``--dial-timeout``: Dial backend request timeout in seconds. Default value is ``10``.
-- ``--client-read-timeout``: Maximum duration for reading the entire request, including the body. Default
-  value is ``0``.
-- ``--client-read-header-timeout``: Amount of time allowed to read request headers. Default value is ``0``.
-- ``--client-write-timeout``: Maximum duration before timing out writes of the response. Default
-  value is ``0``.
-- ``--client-idle-timeout``: Maximum amount of time to wait for the next request when keep-alives are enabled. Default value is
-  ``0``.
-- ``--dead-backend-time``: Time in seconds a backend will remain disabled after
-  a network failure. Default value is ``30``.
-- ``--flush-interval``: Time in milliseconds to flush the proxied request.
-  Default value is ``10``.
-- ``--request-id-header``: Enables PlanB to set a header with an unique ID to
-  the requests, facilitating the process of tracing requests.
+- `--listen value, -l value`: Address to listen (default: "0.0.0.0:8989")
+- `--tls-listen value`: Address to listen with tls
+- `--tls-preset value`: Preset containing supported TLS versions and cyphers, according
+  to https://wiki.mozilla.org/Security/Server_Side_TLS. Possible
+  values are [modern, intermediate, old] (default: "modern")
+- `--metrics-address value`: Address to expose prometheus /metrics
+- `--load-certificates-from value`: Path where certificate will found. If value equals 'redis'
+  certificate will be loaded from redis service. (default:
+  "redis")
+- `--read-redis-network value`: Redis address network, possible values are "tcp" for tcp
+  connection and "unix" for connecting using unix sockets
+  (default: "tcp")
+- `--read-redis-host value`: Redis host address for tcp connections or socket path for unix
+  sockets (default: "127.0.0.1")
+- `--read-redis-port value`: Redis port (default: 6379)
+- `--read-redis-sentinel-addrs value`: Comma separated list of redis sentinel addresses
+- `--read-redis-sentinel-name value`: Redis sentinel name
+- `--read-redis-password value`: Redis password
+- `--read-redis-db value`: Redis database number (default: 0)
+- `--write-redis-network value`: Redis address network, possible values are "tcp" for tcp
+  connection and "unix" for connecting using unix sockets
+  (default: "tcp")
+- `--write-redis-host value`: Redis host address for tcp connections or socket path for unix
+  sockets (default: "127.0.0.1")
+- `--write-redis-port value`: Redis port (default: 6379)
+- `--write-redis-sentinel-addrs value`: Comma separated list of redis sentinel addresses
+- `--write-redis-sentinel-name value`: Redis sentinel name
+- `--write-redis-password value`: Redis password
+- `--write-redis-db value`: Redis database number (default: 0)
+- `--access-log value`: File path where access log will be written. If value equals
+  'syslog' log will be sent to local syslog. The value 'none' can
+  be used to disable access logs. (default: "./access.log")
+- `--request-timeout value`: Total backend request timeout in seconds (default: 30)
+- `--dial-timeout value`: Dial backend request timeout in seconds (default: 10)
+- `--client-read-timeout value`: Maximum duration for reading the entire request, including the
+  body (default: 0s)
+- `--client-read-header-timeout value`: Amount of time allowed to read request headers (default: 0s)
+- `--client-write-timeout value`: Maximum duration before timing out writes of the response
+  (default: 0s)
+- `--client-idle-timeout value`: Maximum amount of time to wait for the next request when
+  keep-alives are enabled (default: 0s)
+- `--dead-backend-time value`: Time in seconds a backend will remain disabled after a network
+  failure (default: 30)
+- `--flush-interval value`: Time in milliseconds to flush the proxied request (default: 10)
+- `--request-id-header value`: Header to enable message tracking
+- `--active-healthcheck`: Enable active healthcheck on dead backends once they are marked
+  as dead. Enabling this flag will result in dead backends only
+  being enabled again once the active healthcheck routine is able
+  to reach them.
+- `--engine value`: Reverse proxy engine, options are 'native', 'sni' and
+  'fasthttp'. Using 'sni' and 'fasthttp' is highly experimental
+  and not recommended for production environments. (default:
+  "native")
+- `--backend-cache`: Enable caching backend results for 2 seconds. This may cause
+  temporary inconsistencies.
+- `--help, -h`: show help
+- `--version, -v`: print the version
+
+The `--read-redis-*` flags refer to the Redis server used for read-only
+operations (reading the backends for each frontend).
+
+The `--write-redis-*` flags refer to the Redis server used for write operations
+(marking and publishing dead backends).
+
+Separating the read and write servers is not mandatory but is useful for
+improving performance. A common scenario is having a slave Redis server on
+localhost configured as `--read-redis` and a remote Redis master configured as
+`--write-redis`.
 
 ## Features
 
