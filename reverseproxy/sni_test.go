@@ -28,9 +28,10 @@ var (
 
 // TestRoundTripSNI test SNI reverseproxy using example.com domain
 func (s *SNI) TestRoundTripSNI(c *check.C) {
-	var receivedReq *http.Request
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		receivedReq = req
+		c.Assert(req.Host, check.Equals, "example.com")
+		c.Assert(req.Header.Get("X-My-Header"), check.Equals, "myvalue")
+		c.Assert(req.Header.Get("X-Host"), check.Equals, "")
 		rw.Header().Set("X-Some-Rsp-Header", "rspvalue")
 		rw.WriteHeader(200)
 		rw.Write([]byte("my result"))
@@ -68,18 +69,12 @@ func (s *SNI) TestRoundTripSNI(c *check.C) {
 	data, err := ioutil.ReadAll(rsp.Body)
 	c.Assert(err, check.IsNil)
 	c.Assert(string(data), check.Equals, "my result")
-	c.Assert(receivedReq.Host, check.Equals, "example.com")
-	c.Assert(receivedReq.Header.Get("X-My-Header"), check.Equals, "myvalue")
-	c.Assert(receivedReq.Header.Get("X-Host"), check.Equals, "")
-	c.Assert(receivedReq.Header.Get("X-Forwarded-Host"), check.Equals, "")
 	c.Assert(router.resultHost, check.Equals, "example.com")
 }
 
 // TestRoundTripSNIWithoutHostname test SNI reverseproxy using example.com domain without SNI
 func (s *SNI) TestRoundTripSNIWithoutHostname(c *check.C) {
-	var receivedReq *http.Request
 	ts := httptest.NewTLSServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		receivedReq = req
 		rw.Header().Set("X-Some-Rsp-Header", "rspvalue")
 		rw.WriteHeader(200)
 		rw.Write([]byte("my result"))
