@@ -45,6 +45,7 @@ type ReverseProxyConfig struct {
 	WriteTimeout      time.Duration
 	IdleTimeout       time.Duration
 	RequestIDHeader   string
+	ProxyProtocol     bool
 }
 
 type RequestData struct {
