@@ -76,6 +76,8 @@ func runServer(c *cli.Context) {
 
 	var rp reverseproxy.ReverseProxy
 	switch c.String("engine") {
+    case "native":
+        rp = &reverseproxy.NativeReverseProxy{}
 	default:
 		log.Fatal(errors.New("invalid engine"))
 	}
