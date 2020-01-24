@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tsuru/planb/log"
+	"github.com/edukorg/planb/log"
 	"golang.org/x/net/websocket"
 	"gopkg.in/check.v1"
 )

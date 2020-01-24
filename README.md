@@ -185,5 +185,5 @@ $ kill -s USR1 <planb-PID>
 
 ## Links
 
-* Repository & Issue Tracker: https://github.com/tsuru/planb
+* Repository & Issue Tracker: https://github.com/edukorg/planb
 * Talk to us on Gitter: https://gitter.im/tsuru/tsuru

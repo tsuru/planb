@@ -10,9 +10,9 @@ import (
 	"testing"
 
 	"github.com/go-redis/redis"
-	"github.com/tsuru/planb/backend"
-	"github.com/tsuru/planb/reverseproxy"
-	"github.com/tsuru/planb/router"
+	"github.com/edukorg/planb/backend"
+	"github.com/edukorg/planb/reverseproxy"
+	"github.com/edukorg/planb/router"
 )
 
 const redisDB = 5

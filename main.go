@@ -21,10 +21,10 @@ import (
 	"github.com/codegangsta/cli"
 	"github.com/google/gops/agent"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/tsuru/planb/backend"
-	"github.com/tsuru/planb/reverseproxy"
-	"github.com/tsuru/planb/router"
-	"github.com/tsuru/planb/tls"
+	"github.com/edukorg/planb/backend"
+	"github.com/edukorg/planb/reverseproxy"
+	"github.com/edukorg/planb/router"
+	"github.com/edukorg/planb/tls"
 )
 
 func handleSignals(server interface {
@@ -363,6 +363,6 @@ The value 'none' can be used to disable access logs.`,
 	app.Usage = "http and websockets reverse proxy"
 	app.Action = runServer
 	app.Author = "tsuru team"
-	app.Email = "https://github.com/tsuru/planb"
+	app.Email = "https://github.com/edukorg/planb"
 	app.Run(os.Args)
 }

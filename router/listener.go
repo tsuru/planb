@@ -6,8 +6,8 @@ import (
 	"net"
 	"sync"
 
-	"github.com/tsuru/planb/reverseproxy"
-	"github.com/tsuru/planb/tls"
+	"github.com/edukorg/planb/reverseproxy"
+	"github.com/edukorg/planb/tls"
 )
 
 const (

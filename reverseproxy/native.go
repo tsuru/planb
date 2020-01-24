@@ -22,7 +22,7 @@ import (
 
 	"github.com/nu7hatch/gouuid"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/tsuru/planb/log"
+	"github.com/edukorg/planb/log"
 )
 
 var (
