@@ -15,3 +15,10 @@ build: setup
 
 test: setup
 	$(GO) test
+
+docker-build: build
+	git diff-index --quiet HEAD -- || exit 1
+	docker build . -t 629980096842.dkr.ecr.us-east-1.amazonaws.com/tsuru-planb:`git rev-parse --verify HEAD`
+
+docker-push: docker-build
+	docker push 629980096842.dkr.ecr.us-east-1.amazonaws.com/tsuru-planb:`git rev-parse --verify HEAD`
