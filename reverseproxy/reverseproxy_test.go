@@ -841,9 +841,6 @@ func (s *S) TestRoundTripPingFailingHC(c *check.C) {
 
 func (s *S) TestRoundTripStreamingRequest(c *check.C) {
 	rp := s.factory()
-	if fmt.Sprintf("%T", rp) == "*reverseproxy.FastReverseProxy" {
-		c.Skip("fasthttp does not support request streaming")
-	}
 	var receivedReq *http.Request
 	msgCh := make(chan string)
 	ts := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
@@ -916,9 +913,6 @@ func (s *S) TestRoundTripStreamingRequest(c *check.C) {
 
 func (s *S) TestRoundTripTimeout(c *check.C) {
 	rp := s.factory()
-	if fmt.Sprintf("%T", rp) == "*reverseproxy.FastReverseProxy" {
-		c.Skip("fasthttp is not handling timeouts correctly")
-	}
 	blk := make(chan struct{})
 	ts := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
 		<-blk
@@ -948,9 +942,6 @@ func (s *S) TestRoundTripTimeout(c *check.C) {
 
 func (s *S) TestRoundTripTimeoutDial(c *check.C) {
 	rp := s.factory()
-	if _, ok := rp.(*FastReverseProxy); ok {
-		c.Skip("fasthttp is not handling timeouts correctly")
-	}
 	// Reserved TEST-NET IP should cause
 	router := &recoderRouter{dst: "http://192.0.2.1:49151"}
 	err := rp.Initialize(ReverseProxyConfig{Router: router, DialTimeout: time.Second, RequestTimeout: 10 * time.Second, RequestIDHeader: "RID"})
